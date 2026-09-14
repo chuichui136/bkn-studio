@@ -53,6 +53,7 @@ describe("object-type.service · getObjectTypeSampleData", () => {
           need_total: true,
           offset: 0,
         },
+        skipErrorToast: true,
         transformResponse: transformPrecisionSafeJSONResponse,
       },
     );

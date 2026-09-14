@@ -31,6 +31,7 @@ import styles from "./ResourceDetailPanel.module.css";
 
 type ResourceDetailPanelProps = {
   active: boolean;
+  canEdit: boolean;
   catalog: CatalogRecord | null;
   onEditingChange?: (editing: boolean) => void;
   onResourceRefreshed?: (resource: CatalogResource) => void;
@@ -40,6 +41,7 @@ type ResourceDetailPanelProps = {
 
 export function ResourceDetailPanel({
   active,
+  canEdit,
   catalog,
   onEditingChange,
   onResourceRefreshed,
@@ -61,7 +63,7 @@ export function ResourceDetailPanel({
   resourceIdentityRef.current = resourceIdentityKey;
 
   const gate = resourceGateOf(catalog);
-  const readOnly = isResourceIndexReadOnly(catalog);
+  const readOnly = isResourceIndexReadOnly(catalog) || !canEdit;
   const schemaOffset = (schemaPage - 1) * schemaPageSize;
 
   useEffect(() => {
@@ -73,12 +75,12 @@ export function ResourceDetailPanel({
   }, [editing, onEditingChange]);
 
   useEffect(() => {
-    if (!active) {
+    if (!active || readOnly) {
       setEditing(false);
       setDescriptionDraft(resource.description);
       setSchemaDraft(resource.schema);
     }
-  }, [active, resource]);
+  }, [active, readOnly, resource]);
 
   useEffect(() => {
     setSchemaPage(1);

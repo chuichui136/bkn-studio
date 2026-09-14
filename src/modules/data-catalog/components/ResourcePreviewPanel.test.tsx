@@ -45,6 +45,7 @@ const resource: CatalogResource = {
   description: "",
   id: "resource-1",
   name: "orders",
+  operations: ["view_detail", "query_data"],
   rowCount: 0,
   schema: [],
   sourceIdentifier: "public.orders",
@@ -486,5 +487,22 @@ describe("ResourcePreviewPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("dataCatalog.preview.noQueryPermission")).toBeTruthy();
     });
+  });
+
+  it("does not request rows when effective resource operations omit query_data", () => {
+    render(
+      <ResourcePreviewPanel
+        active
+        resource={{
+          ...resource,
+          columnCount: 1,
+          operations: ["view_detail"],
+          schema: [{ name: "id", type: "integer" }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("dataCatalog.preview.noQueryPermission")).toBeTruthy();
+    expect(previewCatalogResourceMock).not.toHaveBeenCalled();
   });
 });

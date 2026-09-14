@@ -213,6 +213,7 @@ type BackendResourceSummary = {
   local_status?: string;
   logic_type?: string;
   name: string;
+  operations?: string[];
   row_count?: number;
   schema?: string;
   source_identifier?: string;
@@ -306,6 +307,7 @@ function mapResource(item: BackendResourceSummary & Partial<BackendResourceDetai
     id: item.id,
     catalogId: item.catalog_id,
     name: item.name,
+    operations: item.operations ?? [],
     tags: item.tags ?? [],
     category: normalizeCategory(item.category, item.logic_type),
     sourceIdentifier: item.source_identifier ?? "",
@@ -462,6 +464,7 @@ export async function createCatalogResource(input: ResourceCreateInput) {
       description: input.description,
       enabled: true,
       localIndexStatus: "unavailable",
+      operations: ["view_detail", "query_data", "modify"],
       schema:
         input.schema.length > 0
           ? input.schema
@@ -506,6 +509,7 @@ export async function createCatalogResource(input: ResourceCreateInput) {
       description: input.description,
       enabled: true,
       localIndexStatus: "unavailable",
+      operations: response.data.operations ?? [],
       schema: input.schema,
       columnCount: input.schema.length,
       rowCount: 0,
@@ -771,6 +775,7 @@ export async function previewCatalogResource(
     },
     {
       headers: { "X-HTTP-Method-Override": "GET" },
+      skipErrorToast: true,
       transformResponse: transformPrecisionSafeJSONResponse,
     },
   );

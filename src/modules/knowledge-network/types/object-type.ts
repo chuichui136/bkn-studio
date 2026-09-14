@@ -31,6 +31,7 @@ export type ObjectTypeDataSource = {
   dataSourceId?: string;
   id: string;
   name: string;
+  operations?: string[];
   type?: "resource";
 };
 
@@ -60,6 +61,7 @@ export type ObjectTypeResourcePreview = {
     title: string;
   }>;
   name: string;
+  queryDenied?: boolean;
   rowTotalCount?: number;
   rows: Array<Record<string, string | number>>;
 };

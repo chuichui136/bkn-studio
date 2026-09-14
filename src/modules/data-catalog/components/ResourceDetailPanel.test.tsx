@@ -67,7 +67,7 @@ describe("ResourceDetailPanel", () => {
 
     const { rerender } = render(
       <MemoryRouter>
-        <ResourceDetailPanel active={false} catalog={null} resource={resource} />
+        <ResourceDetailPanel active={false} canEdit={false} catalog={null} resource={resource} />
       </MemoryRouter>,
     );
 
@@ -75,7 +75,7 @@ describe("ResourceDetailPanel", () => {
 
     rerender(
       <MemoryRouter>
-        <ResourceDetailPanel active catalog={null} resource={latestResource} />
+        <ResourceDetailPanel active canEdit={false} catalog={null} resource={latestResource} />
       </MemoryRouter>,
     );
 
@@ -88,6 +88,7 @@ describe("ResourceDetailPanel", () => {
       <MemoryRouter>
         <ResourceDetailPanel
           active
+          canEdit={false}
           catalog={null}
           resource={{ ...resource, tags: ["index"] }}
         />
@@ -115,6 +116,7 @@ describe("ResourceDetailPanel", () => {
       <MemoryRouter>
         <ResourceDetailPanel
           active
+          canEdit
           catalog={null}
           onResourceRefreshed={onResourceRefreshed}
           resource={{ ...resource, expectedUpdateTime: 100 }}

@@ -57,6 +57,7 @@ import type {
   ObjectTypeLogicProperty,
   ObjectTypeResourcePreview,
 } from "@/modules/knowledge-network/types/knowledge-network";
+import { hasKnowledgeNetworkRecordOperation } from "@/modules/knowledge-network/utils/record-operations";
 
 import styles from "./ObjectTypeDetailScene.module.css";
 
@@ -378,9 +379,11 @@ export function ObjectTypeDetailScene() {
     void loadData();
   }, [loadData]);
 
+  const canQueryData = hasKnowledgeNetworkRecordOperation(detail, "query_data");
   const shouldLoadPreview =
     activeTab === "data" &&
     (dataSection === "instance" || dataSection === "logic") &&
+    canQueryData &&
     Boolean(detail?.dataSource?.id);
   const shouldLoadRelatedRelations = Boolean(networkId && objectTypeId && detail);
   const shouldLoadRelatedMetrics = Boolean(networkId && objectTypeId && detail);
@@ -1667,7 +1670,14 @@ export function ObjectTypeDetailScene() {
         {dataSection === "instance" ? (
           <>
             {!boundDataView ? (
-          <Empty description={t("knowledgeNetwork.objectTypeDataSourceEmpty")} />
+              <Empty description={t("knowledgeNetwork.objectTypeDataSourceEmpty")} />
+            ) : !canQueryData ? (
+              <Alert
+                description={t("knowledgeNetwork.objectTypeProxyReadForbiddenDescription")}
+                message={t("knowledgeNetwork.objectTypeProxyReadForbidden")}
+                showIcon
+                type="warning"
+              />
             ) : previewError ? (
               <Alert
                 action={(
@@ -1758,6 +1768,7 @@ export function ObjectTypeDetailScene() {
 
         {dataSection === "logic" ? (
           <ObjectTypeDetailLogicPropertyTrialPanel
+            canQueryData={canQueryData}
             dataProperties={detail.dataProperties}
             displayKey={objectTypeDisplayKey}
             highlightedLogicPropertyName={selectedLogicPropertyName}

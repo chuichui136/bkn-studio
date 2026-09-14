@@ -47,6 +47,7 @@ describe("resource.service · previewCatalogResource", () => {
       },
       {
         headers: { "X-HTTP-Method-Override": "GET" },
+        skipErrorToast: true,
         transformResponse: transformPrecisionSafeJSONResponse,
       },
     );
@@ -191,6 +192,7 @@ describe("resource.service · listCatalogResourcePage", () => {
             index_name: "bkn_res-1",
             local_status: "available",
             name: "orders",
+            operations: ["view_detail", "query_data"],
             schema: "external_data",
             status: "stale",
             status_message: "discover metadata failed",
@@ -229,6 +231,7 @@ describe("resource.service · listCatalogResourcePage", () => {
         lastDiscoverStatus: "error",
         localIndexName: "bkn_res-1",
         localIndexStatus: "available",
+        operations: ["view_detail", "query_data"],
         schemaName: "external_data",
         status: "stale",
         statusMessage: "discover metadata failed",
@@ -297,6 +300,7 @@ describe("resource.service · getCatalogResources", () => {
             },
             local_status: "available",
             name: "orders",
+            operations: ["view_detail", "query_data"],
           },
         ],
       },
@@ -313,6 +317,7 @@ describe("resource.service · getCatalogResources", () => {
         },
         localIndexName: "bkn_res-1",
         localIndexStatus: "available",
+        operations: ["view_detail", "query_data"],
       }),
     ]);
   });

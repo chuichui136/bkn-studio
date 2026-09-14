@@ -26,6 +26,7 @@ type BackendResourceListEntry = {
   catalog_id?: string;
   id: string;
   name?: string;
+  operations?: string[];
 };
 
 type BackendResourceListResponse = {
@@ -44,6 +45,7 @@ type BackendResourceField = {
 type BackendResourceDetail = {
   id: string;
   name?: string;
+  operations?: string[];
   schema_definition?: BackendResourceField[] | null;
 };
 
@@ -59,6 +61,7 @@ type BackendResourcePreviewResponse = {
 async function getResourceDetail(resourceId: string): Promise<BackendResourceDetail | null> {
   const response = await http.get<BackendResourceDetailResponse>(
     `/vega-backend/v1/resources/${resourceId}`,
+    { skipErrorToast: true },
   );
   return response.data.entries?.[0] ?? null;
 }
@@ -266,6 +269,7 @@ export async function queryObjectTypeResources(
       dataSourceId: item.catalog_id,
       id: item.id,
       name: item.name ?? item.id,
+      operations: item.operations ?? [],
     })),
     total: response.data.total_count ?? 0,
   };
@@ -299,9 +303,28 @@ export async function getObjectTypeResourcePreview(
     });
   }
 
-  const [detail, previewResponse] = await Promise.all([
-    getResourceDetail(resourceId),
-    http.post<BackendResourcePreviewResponse>(
+  const detail = await getResourceDetail(resourceId);
+
+  if (!detail) {
+    return null;
+  }
+
+  const fields = (detail.schema_definition ?? []).map(mapResourceField);
+  const canQueryData = detail.operations?.includes("*") || detail.operations?.includes("query_data");
+
+  if (!canQueryData) {
+    return {
+      columns: fields.map((item) => ({
+        dataIndex: item.name,
+        title: item.displayName,
+      })),
+      name: detail.name ?? resourceId,
+      queryDenied: true,
+      rows: [],
+    };
+  }
+
+  const previewResponse = await http.post<BackendResourcePreviewResponse>(
       `/vega-backend/v1/resources/${resourceId}/data`,
       {
         need_total: true,
@@ -315,16 +338,11 @@ export async function getObjectTypeResourcePreview(
         headers: {
           "X-HTTP-Method-Override": "GET",
         },
+        skipErrorToast: true,
         transformResponse: transformPrecisionSafeJSONResponse,
       },
-    ),
-  ]);
+    );
 
-  if (!detail) {
-    return null;
-  }
-
-  const fields = (detail.schema_definition ?? []).map(mapResourceField);
   const rows = normalizeResourcePreviewRows(previewResponse.data.entries);
   const columns =
     fields.length > 0

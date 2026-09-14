@@ -131,7 +131,10 @@ async function resolveObjectTypeConceptGroups(
     .map((group) => ({ id: group.id, name: group.name }));
 }
 
-export async function listKnowledgeNetworkObjectTypes(networkId: string) {
+export async function listKnowledgeNetworkObjectTypes(
+  networkId: string,
+  options: { skipErrorToast?: boolean } = {},
+) {
   if (useMock) {
     return wait(
       (mockObjectTypes[networkId] ?? []).map((item) => ({
@@ -150,6 +153,7 @@ export async function listKnowledgeNetworkObjectTypes(networkId: string) {
         offset: 0,
         sort: "update_time",
       },
+      skipErrorToast: options.skipErrorToast,
     },
   );
 
@@ -229,6 +233,7 @@ export async function getObjectTypeSampleData(
         need_total: true,
         offset: 0,
       },
+      skipErrorToast: true,
       transformResponse: transformPrecisionSafeJSONResponse,
     },
   );

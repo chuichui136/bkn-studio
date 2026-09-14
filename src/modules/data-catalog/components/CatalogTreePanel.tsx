@@ -27,6 +27,7 @@ import { isBuiltinLogicalCatalog } from "@/modules/data-catalog/lib/logical-cata
 import {
   createLogicalCatalog,
   deleteCatalog,
+  hasCatalogOperation,
   previewCatalogDeletion,
 } from "@/shared/catalog";
 import type { CatalogConnectorTypeStat, CatalogRecord } from "@/shared/catalog";
@@ -438,8 +439,7 @@ export function CatalogTreePanel({
             <span className={styles.catalogNodeName}>{catalog.name}</span>
             {isBuiltinLogicalCatalog(catalog) ? (
               <span className={styles.treeMiniTag}>{t("dataCatalog.tree.builtin")}</span>
-            ) : dataCatalogCreationAvailable ? (
-              <PermissionGate permissions="catalog:delete">
+            ) : dataCatalogCreationAvailable && hasCatalogOperation(catalog, "delete") ? (
                 <button
                   aria-label={t("common.delete")}
                   className={styles.treeActionBtnVisible}
@@ -518,7 +518,6 @@ export function CatalogTreePanel({
                 >
                   <DeleteOutlined />
                 </button>
-              </PermissionGate>
             ) : null}
           </span>
         ),

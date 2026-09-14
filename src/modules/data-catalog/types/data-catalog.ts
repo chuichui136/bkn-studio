@@ -78,6 +78,8 @@ export type CatalogResource = {
   /** Authoritative query availability of the Resource's local index. */
   localIndexStatus: ResourceLocalIndexStatus;
   name: string;
+  /** Effective operations for the current account on this Resource. */
+  operations?: string[];
   rowCount: number;
   /** Schema in the physical data source; named distinctly from the field-definition schema. */
   schemaName?: string;

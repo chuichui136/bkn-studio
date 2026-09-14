@@ -99,7 +99,11 @@ vi.mock("@/modules/data-catalog/services/build-task.service", () => ({
 vi.mock("@/modules/data-catalog/services/mock-db", () => ({
   subscribeMockDb: subscribeMockDbMock,
 }));
-vi.mock("@/shared/catalog", () => ({ getCatalog: getCatalogMock }));
+vi.mock("@/shared/catalog", () => ({
+  getCatalog: getCatalogMock,
+  hasCatalogOperation: (catalog: { operations?: string[] } | null, operation: string) =>
+    Boolean(catalog?.operations?.includes("*") || catalog?.operations?.includes(operation)),
+}));
 
 import { ResourceWorkspaceScene } from "./ResourceWorkspaceScene";
 
@@ -123,7 +127,11 @@ describe("ResourceWorkspaceScene", () => {
     vi.clearAllMocks();
     currentPermissions.value = [];
     drawerProps.value = null;
-    getCatalogMock.mockResolvedValue({ id: "catalog-1", name: "Catalog" });
+    getCatalogMock.mockResolvedValue({
+      id: "catalog-1",
+      name: "Catalog",
+      operations: ["authorize", "resource_manage", "task_manage"],
+    });
     listBuildTaskPageMock.mockResolvedValue({ items: [], total: 0 });
     subscribeMockDbMock.mockImplementation(() => () => {});
     discoverCatalogResourceMock.mockReset();
@@ -180,6 +188,30 @@ describe("ResourceWorkspaceScene", () => {
 
     await waitFor(() => expect(screen.getByTestId("detail-schema-name")).toBeTruthy());
     expect(getCatalogMock).toHaveBeenCalledWith(staleResource.catalogId, { skipErrorToast: true });
+  });
+
+  it("does not use global catalog grants for management actions on the current catalog", async () => {
+    currentPermissions.value = ["catalog:resource_manage", "catalog:task_manage"];
+    getCatalogResourceMock.mockResolvedValue(staleResource);
+    getCatalogMock.mockResolvedValue({
+      id: "catalog-1",
+      name: "Catalog",
+      operations: ["view_detail"],
+    });
+
+    render(
+      <ResourceWorkspaceScene
+        indexView="config"
+        onIndexViewChange={vi.fn()}
+        onTabChange={vi.fn()}
+        resourceId={staleResource.id}
+        tab="detail"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("detail-schema-name")).toBeTruthy());
+    expect(screen.queryByText("dataCatalog.resourceWorkspace.refreshMetadata")).toBeNull();
+    expect(screen.queryByText("common.disable")).toBeNull();
   });
 
   it("opens the shared authorization drawer from the resource workspace", async () => {

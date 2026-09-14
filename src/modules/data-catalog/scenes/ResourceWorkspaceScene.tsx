@@ -12,7 +12,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { useAppServices } from "@/framework/context/use-app-services";
-import { PermissionGate } from "@/framework/permission/PermissionGate";
 import { extractRequestErrorMessage, isRequestForbidden } from "@/framework/request/error-message";
 import { hasPermissions } from "@/framework/permission/has-permissions";
 import { AppButton } from "@/framework/ui/common/AppButton";
@@ -42,7 +41,7 @@ import {
   setCatalogResourceEnabled,
 } from "@/modules/data-catalog/services/resource.service";
 import type { BuildTask, CatalogResource } from "@/modules/data-catalog/types/data-catalog";
-import { getCatalog } from "@/shared/catalog";
+import { getCatalog, hasCatalogOperation } from "@/shared/catalog";
 import type { CatalogRecord } from "@/shared/catalog";
 
 import styles from "./ResourceWorkspaceScene.module.css";
@@ -196,6 +195,8 @@ export function ResourceWorkspaceScene({
   const resourceMissing = queryBlockReason === "missing";
   const resourceStale = queryBlockReason === "stale";
   const metadataUnavailable = queryBlockReason === "metadata_unavailable";
+  const canManageResources = hasCatalogOperation(catalog, "resource_manage");
+  const canManageTasks = hasCatalogOperation(catalog, "task_manage");
 
   useEffect(() => {
     if (hideSemanticUnderstanding && tab === "semantic-understanding") {
@@ -373,7 +374,7 @@ export function ResourceWorkspaceScene({
             </div>
           </div>
           <Space>
-            <PermissionGate permissions="catalog:task_manage">
+            {canManageTasks ? (
               <AppButton
                 disabled={detailEditing}
                 icon={<ReloadOutlined />}
@@ -382,8 +383,8 @@ export function ResourceWorkspaceScene({
               >
                 {t("dataCatalog.resourceWorkspace.refreshMetadata")}
               </AppButton>
-            </PermissionGate>
-            <PermissionGate permissions="catalog:resource_manage">
+            ) : null}
+            {canManageResources ? (
               <AppButton
                 color={resource.enabled === false ? "green" : undefined}
                 danger={resource.enabled !== false}
@@ -395,7 +396,7 @@ export function ResourceWorkspaceScene({
               >
                 {t(resource.enabled === false ? "common.enable" : "common.disable")}
               </AppButton>
-            </PermissionGate>
+            ) : null}
             {canAuthorizeGrants && !catalog?.internal ? (
               <AppButton
                 icon={<KeyOutlined />}
@@ -477,6 +478,7 @@ export function ResourceWorkspaceScene({
                 <div className={styles.tabPanel}>
                   <ResourceDetailPanel
                     active={tab === "detail"}
+                    canEdit={canManageResources}
                     catalog={catalog}
                     onEditingChange={setDetailEditing}
                     onResourceRefreshed={handleResourceRefreshed}
@@ -526,7 +528,11 @@ export function ResourceWorkspaceScene({
                     label: t("dataCatalog.resourceWorkspace.tabSemanticUnderstanding"),
                     children: (
                       <div className={styles.tabPanel}>
-                        <ResourceSemanticUnderstandingPanel active={tab === "semantic-understanding"} resource={resource} />
+                        <ResourceSemanticUnderstandingPanel
+                          active={tab === "semantic-understanding"}
+                          catalog={catalog}
+                          resource={resource}
+                        />
                       </div>
                     ),
                   },

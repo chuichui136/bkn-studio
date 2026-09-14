@@ -915,6 +915,7 @@ export function ExperienceScene({
             <DataBrowserPanel
               active={rightTab === "data"}
               env={env}
+              permissionNetworkId={network?.id ?? id}
               assistantKind={op ? requestDataAssistantKindOf(op.id) : null}
               onFillField={fillBodyField}
               onFillResource={fillResource}

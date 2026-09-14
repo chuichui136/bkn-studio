@@ -133,6 +133,14 @@ describe("CatalogDetailPanel authorize entry", () => {
     expect(screen.queryByText("dataCatalog.catalog.authorize")).toBeNull();
   });
 
+  it("does not use a global resource_manage grant for another logical catalog", async () => {
+    currentPermissions.value = ["catalog:resource_manage"];
+    renderPanel({ ...catalog, connectorType: "", type: "logical" });
+    await act(async () => {});
+
+    expect(screen.queryByText("dataCatalog.resource.create")).toBeNull();
+  });
+
   // Built-in catalogs stay read-only in Studio, owner row or not.
   it("hides the entry on an internal catalog", async () => {
     currentPermissions.value = ["admin-authz:grant"];

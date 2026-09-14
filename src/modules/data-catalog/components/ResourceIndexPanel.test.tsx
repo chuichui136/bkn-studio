@@ -11,6 +11,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BuildTask, CatalogResource } from "@/modules/data-catalog/types/data-catalog";
+import type { CatalogRecord } from "@/shared/catalog";
 
 import styles from "./shared.module.css";
 
@@ -120,6 +121,11 @@ const resource: CatalogResource = {
   updateTime: "2026-08-11T00:00:00Z",
 };
 
+const manageableCatalog = {
+  internal: false,
+  operations: ["task_manage"],
+} as CatalogRecord;
+
 function buildTask(overrides: Partial<BuildTask>): BuildTask {
   return {
     primaryKeyFields: [],
@@ -155,7 +161,7 @@ describe("ResourceIndexPanel", () => {
       <MemoryRouter>
         <ResourceIndexPanel
           active
-          catalog={null}
+          catalog={manageableCatalog}
           indexView="tasks"
           indexViewExplicit
           onIndexViewChange={vi.fn()}
@@ -174,7 +180,7 @@ describe("ResourceIndexPanel", () => {
       <MemoryRouter>
         <ResourceIndexPanel
           active
-          catalog={null}
+          catalog={manageableCatalog}
           indexView="tasks"
           indexViewExplicit
           onIndexViewChange={vi.fn()}
@@ -200,7 +206,7 @@ describe("ResourceIndexPanel", () => {
       <MemoryRouter>
         <ResourceIndexPanel
           active
-          catalog={null}
+          catalog={manageableCatalog}
           indexView="tasks"
           indexViewExplicit
           onIndexViewChange={vi.fn()}
@@ -230,7 +236,7 @@ describe("ResourceIndexPanel", () => {
       <MemoryRouter>
         <ResourceIndexPanel
           active
-          catalog={null}
+          catalog={manageableCatalog}
           indexView="tasks"
           indexViewExplicit
           onIndexViewChange={vi.fn()}
@@ -261,7 +267,7 @@ describe("ResourceIndexPanel", () => {
       <MemoryRouter>
         <ResourceIndexPanel
           active
-          catalog={null}
+          catalog={manageableCatalog}
           indexView="tasks"
           indexViewExplicit
           onIndexViewChange={vi.fn()}
@@ -299,7 +305,7 @@ describe("ResourceIndexPanel", () => {
       <MemoryRouter>
         <ResourceIndexPanel
           active
-          catalog={null}
+          catalog={manageableCatalog}
           indexView="tasks"
           indexViewExplicit
           onIndexViewChange={vi.fn()}
@@ -335,7 +341,7 @@ describe("ResourceIndexPanel", () => {
       <MemoryRouter>
         <ResourceIndexPanel
           active
-          catalog={null}
+          catalog={manageableCatalog}
           indexView="tasks"
           indexViewExplicit
           onIndexViewChange={vi.fn()}
