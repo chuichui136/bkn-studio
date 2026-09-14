@@ -815,6 +815,7 @@ export function UserManagementScene() {
                   pagination={false}
                   rowKey="id"
                   scroll={{ x: 1080 }}
+                  sticky
                 />
               )}
             </div>
