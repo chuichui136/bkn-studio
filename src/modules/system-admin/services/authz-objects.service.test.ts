@@ -263,6 +263,28 @@ describe("authz object picker domain service", () => {
     });
   });
 
+  it("跨类型聚合页不会把页内偏移错误换算为 page/page_size 页码", async () => {
+    const catalogs = Array.from({ length: 3 }, (_, index) => ({ id: `catalog-${index + 1}`, name: `目录 ${index + 1}` }));
+    const operators = Array.from({ length: 20 }, (_, index) => ({ operator_id: `operator-${index + 1}`, name: `算子 ${index + 1}` }));
+    getMock.mockImplementation((path: string) => {
+      if (path === "/vega-backend/v1/catalogs") return Promise.resolve({ data: { entries: catalogs, total_count: 3 } });
+      if (path === "/agent-operator-integration/v1/operator/info/list") return Promise.resolve({ data: { data: operators, total: 20 } });
+      return Promise.resolve({ data: { data: [], total: 0 } });
+    });
+
+    const firstPage = await listTopLevelAuthzObjects(undefined, "", { limit: 10, offset: 0 });
+    const secondPage = await listTopLevelAuthzObjects(undefined, "", { limit: 10, offset: 10 });
+
+    expect(firstPage.objects.map((item) => item.id)).toEqual([
+      "catalog-1", "catalog-2", "catalog-3",
+      "operator-1", "operator-2", "operator-3", "operator-4", "operator-5", "operator-6", "operator-7",
+    ]);
+    expect(secondPage.objects.map((item) => item.id)).toEqual([
+      "operator-8", "operator-9", "operator-10", "operator-11", "operator-12",
+      "operator-13", "operator-14", "operator-15", "operator-16", "operator-17",
+    ]);
+  });
+
   it("数据目录的子资源按所属目录分页，并保留后端总数", async () => {
     getMock.mockResolvedValue({
       data: {

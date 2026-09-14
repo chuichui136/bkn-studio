@@ -93,16 +93,44 @@ async function listOne(type: string, keyword: string, offset = 0, limit = PAGE_S
   if (!cfg) {
     return { objects: [], total: 0 };
   }
-  const response = await http.get<Record<string, unknown>>(cfg.path, {
-    params: { ...pagingParams(cfg.paging, offset, limit), [cfg.nameParam]: keyword || undefined },
-    skipErrorToast: true,
-  });
-  const objects = arrayFrom(response.data, cfg.envelope)
+
+  const toObjects = (body: Record<string, unknown>) => arrayFrom(body, cfg.envelope)
     .map((item) => ({ type, id: str(item[cfg.idField]), name: str(item[cfg.nameField]) || str(item[cfg.idField]) }))
     .filter((object) => object.id);
-  const body = response.data;
-  const total = Number(body.total_count ?? body.total ?? objects.length);
-  return { objects, total: Number.isFinite(total) ? total : objects.length };
+  const totalFrom = (body: Record<string, unknown>, fallback: number) => {
+    const total = Number(body.total_count ?? body.total ?? fallback);
+    return Number.isFinite(total) ? total : fallback;
+  };
+
+  if (cfg.paging === "offset") {
+    const response = await http.get<Record<string, unknown>>(cfg.path, {
+      params: { ...pagingParams(cfg.paging, offset, limit), [cfg.nameParam]: keyword || undefined },
+      skipErrorToast: true,
+    });
+    const objects = toObjects(response.data);
+    return { objects, total: totalFrom(response.data, objects.length) };
+  }
+
+  // Page-based APIs cannot take an arbitrary offset. Fetch their stable PAGE_SIZE pages and
+  // trim the requested slice locally; using the aggregate's remaining offset as page size would
+  // otherwise turn an offset such as 7 into page 1 and duplicate the preceding seven records.
+  const pageOffset = offset % PAGE_SIZE;
+  const firstPageOffset = offset - pageOffset;
+  const pageCount = Math.ceil((pageOffset + limit) / PAGE_SIZE);
+  const responses = await Promise.all(
+    Array.from({ length: pageCount }, (_, index) => http.get<Record<string, unknown>>(cfg.path, {
+      params: {
+        ...pagingParams(cfg.paging, firstPageOffset + index * PAGE_SIZE, PAGE_SIZE),
+        [cfg.nameParam]: keyword || undefined,
+      },
+      skipErrorToast: true,
+    })),
+  );
+  const objects = responses.flatMap((response) => toObjects(response.data));
+  return {
+    objects: objects.slice(pageOffset, pageOffset + limit),
+    total: totalFrom(responses[0]?.data ?? {}, objects.length),
+  };
 }
 
 // List types that have a concrete-instance endpoint. Object-grant history can include additional
