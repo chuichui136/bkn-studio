@@ -444,6 +444,91 @@ describe("BusinessProvenanceScene", { timeout: 30_000 }, () => {
     expect(screen.queryByText("分类结论")).toBeNull();
   });
 
+  it("does not label a recorded non-SQL call input as missing", async () => {
+    getConversations.mockResolvedValue({ entries: [{ conversationId: "conv-1", questionPreview: "查询知识网络", interactionCount: 1, agentName: "Supply Agent" }], total: 1 });
+    getInteractions.mockResolvedValue({ entries: [{ interactionId: "int-1", questionPreview: "查询知识网络" }], total: 1 });
+    getInteraction.mockResolvedValue({
+      interactionId: "int-1", conversationContext: [], derivedFacts: [], contextRelations: [],
+      operations: [{
+        operationId: "op-schema", toolName: "search_schema", callStatus: "completed", status: "unresolved", elements: [], missingFacts: [],
+        input: { mode: "inline", inline: { query: "库存对象和指标" } },
+        output: { mode: "inline", inline: { candidate_count: 34 } },
+      }],
+    });
+
+    render(<BusinessProvenanceScene />);
+    fireEvent.click(await screen.findByRole("button", { name: "查询知识网络" }));
+    expect(await screen.findByText("已记录输入，详情可查看")).not.toBeNull();
+    expect(screen.getByText("已记录结果，详情可查看")).not.toBeNull();
+    expect(screen.queryByText("输入条件未记录")).toBeNull();
+    expect(screen.queryByText("调用完成；结果规模未记录。")).toBeNull();
+
+    fireEvent.click(await screen.findByRole("button", { name: "调用详情" }));
+    expect(await screen.findByText("已记录输入")).not.toBeNull();
+    expect(screen.getByText(/"query": "库存对象和指标"/)).not.toBeNull();
+    expect(screen.getByText("已记录输出")).not.toBeNull();
+    expect(screen.getByText(/"candidate_count": 34/)).not.toBeNull();
+  });
+
+  it("does not present omitted or referenced payload envelopes as recorded content", async () => {
+    getConversations.mockResolvedValue({ entries: [{ conversationId: "conv-1", questionPreview: "查询知识网络", interactionCount: 1 }], total: 1 });
+    getInteractions.mockResolvedValue({ entries: [{ interactionId: "int-1", questionPreview: "查询知识网络" }], total: 1 });
+    getInteraction.mockResolvedValue({
+      interactionId: "int-1", conversationContext: [], derivedFacts: [], contextRelations: [],
+      operations: [{
+        operationId: "op-schema", toolName: "search_schema", callStatus: "completed", status: "unresolved", elements: [], missingFacts: [],
+        input: { mode: "omitted", omitted_reason: "payload_too_large", byte_length: 4096 },
+        output: { mode: "referenced", artifact_ref: "artifact:result-1" },
+      }],
+    });
+
+    render(<BusinessProvenanceScene />);
+    fireEvent.click(await screen.findByRole("button", { name: "查询知识网络" }));
+    expect(await screen.findByText("输入条件未记录")).not.toBeNull();
+    expect(screen.getByText("调用完成；结果规模未记录。")).not.toBeNull();
+    expect(screen.queryByText("已记录输入，详情可查看")).toBeNull();
+    expect(screen.queryByText("已记录结果，详情可查看")).toBeNull();
+
+    fireEvent.click(await screen.findByRole("button", { name: "调用详情" }));
+    expect(screen.queryByText("已记录输入")).toBeNull();
+    expect(screen.queryByText("已记录输出")).toBeNull();
+    expect(screen.queryByText(/payload_too_large/)).toBeNull();
+    expect(screen.queryByText(/artifact:result-1/)).toBeNull();
+  });
+
+  it("shows the authorized full source texts as rendered Markdown on demand", async () => {
+    getConversations.mockResolvedValue({ entries: [{ conversationId: "conv-1", questionPreview: "截断问题", interactionCount: 1, agentName: "Supply Agent" }], total: 1 });
+    getInteractions.mockResolvedValue({ entries: [{ interactionId: "int-1", questionPreview: "截断问题", resultPreview: "截断回答", roundNumber: 1 }], total: 1 });
+    getInteraction.mockResolvedValue({
+      interactionId: "int-1", interactionQuestion: "完整输入：查询物料库存", interactionResult: "## 查询结论\n\n**可用库存 906 件**",
+      conversationContext: [], derivedFacts: [], contextRelations: [], operations: [],
+    });
+
+    render(<BusinessProvenanceScene />);
+    fireEvent.click(await screen.findByRole("button", { name: "截断问题" }));
+    fireEvent.click(await screen.findByRole("button", { name: /第 1 轮.*截断问题/ }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "查看完整本轮输入" }));
+    expect(await screen.findByText("完整输入：查询物料库存")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /复制原文/ })).not.toBeNull();
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "查看完整本轮输出" }));
+    expect(await screen.findByText("可用库存 906 件")).not.toBeNull();
+  });
+
+  it("does not present a preview as a complete original source", async () => {
+    getConversations.mockResolvedValue({ entries: [{ conversationId: "conv-1", questionPreview: "截断问题", interactionCount: 1 }], total: 1 });
+    getInteractions.mockResolvedValue({ entries: [{ interactionId: "int-1", questionPreview: "截断问题", resultPreview: "截断回答", roundNumber: 1 }], total: 1 });
+    getInteraction.mockResolvedValue({ interactionId: "int-1", conversationContext: [], derivedFacts: [], contextRelations: [], operations: [] });
+
+    render(<BusinessProvenanceScene />);
+    fireEvent.click(await screen.findByRole("button", { name: "截断问题" }));
+    fireEvent.click(await screen.findByRole("button", { name: /第 1 轮.*截断问题/ }));
+
+    expect(await screen.findAllByText("完整原文未记录，以下为摘要")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "查看完整本轮输入" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看完整本轮输出" })).toBeNull();
+  });
+
   it("shows the EE submission diagnosis instead of claiming that the BKN Agent is unavailable", async () => {
     getConversations.mockResolvedValue({ entries: [{ conversationId: "conv-1", questionPreview: "查询采购", interactionCount: 1, agentName: "Supply Agent" }], total: 1 });
     getInteractions.mockResolvedValue({ entries: [{ interactionId: "int-1", questionPreview: "查询采购" }], total: 1 });

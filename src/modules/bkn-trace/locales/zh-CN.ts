@@ -177,7 +177,7 @@ export const bknTraceZhCN = {
         conditionSeparator: "；", conversation: { title: "业务会话", titleWithAgent: "{{agent}} 的业务会话" },
         decision: { changeRequired: "需要优化", noChange: "暂未发现需要优化项", notEvaluable: "当前事实不足以评估" },
         detail: {
-          actualResult: "实际结果", binding: "定位方式", businessElement: "操作哪个业务元素", businessObject: "业务对象", candidateObjects: "候选业务对象", close: "关闭调用详情", condition: "条件",
+          actualResult: "实际结果", binding: "定位方式", businessElement: "操作哪个业务元素", businessObject: "业务对象", candidateObjects: "候选业务对象", close: "关闭调用详情", condition: "条件", copyPayload: "复制原文", payloadCopied: "已复制原文", recordedError: "已记录错误", recordedInput: "已记录输入", recordedOutput: "已记录输出",
           conversationContext: "会话上下文", how: "怎么调用", interface: "接口", noProperties: "本轮调用没有确定性定位到属性、字段或逻辑。", properties: "属性与字段",
           relationActionMetric: "关系 / 行动 / 指标", resource: "资源", roundCall: "本轮业务调用", what: "做了什么",
         },
@@ -196,12 +196,12 @@ export const bknTraceZhCN = {
         list: { description: "从用户问题和业务结果出发，查看 Agent 如何调用业务知识网络并形成结论。", empty: "暂无业务会话", title: "业务溯源", total: "共 {{count}} 条" },
         listSeparator: "、", networkUnresolved: "尚未定位知识网络", none: "无。", notRecorded: "未记录", notReturned: "未返回",
         operation: {
-          call: "调用", changedQueryNoResult: "调整查询后仍无匹配记录。", completedUnknownSize: "调用完成；结果规模未记录。", conditionNotRecorded: "输入条件未记录", detail: "调用详情",
+          call: "调用", changedQueryNoResult: "调整查询后仍无匹配记录。", completedUnknownSize: "调用完成；结果规模未记录。", conditionNotRecorded: "输入条件未记录", detail: "调用详情", recordedInputAvailable: "已记录输入，详情可查看", recordedOutputAvailable: "已记录结果，详情可查看",
           exploreSchema: "探索知识网络结构", failedResult: "调用失败；错误事实已记录在本次调用中。", findNetwork: "查找业务知识网络", queryElements: "查询{{elements}}", queryObject: "查询业务对象",
           resourceNotRecorded: "本轮事实未记录资源绑定", resultNotRecorded: "结果未记录。", rows: "返回 {{count}} 条。", rows_one: "返回 {{count}} 条。", rows_other: "返回 {{count}} 条。", runSql: "执行数据查询", sqlConditionBelow: "SQL 条件见下方完整 SQL", zeroRows: "返回 0 条。",
         },
         questionNotRecorded: "未记录问题", resultNotRecorded: "业务结果未记录", roundLabel: "第 {{index}} 轮", roundNotRecorded: "轮次未记录", roundQuestionNotRecorded: "本轮问题未记录",
-        rounds: { input: "本轮输入", inputOriginal: "本轮输入（原文）", loading: "正在加载交互轮次", loadingFacts: "正在加载调用事实", noOperations: "本轮未记录调用事实", outputOriginal: "本轮输出（原文）", search: "搜索问题或业务对象", select: "选择交互轮次查看调用事实", summary: "共 {{total}} 轮 · 当前 {{current}} 轮", title: "交互轮次" },
+        rounds: { input: "本轮输入", inputOriginal: "本轮输入（原文）", loading: "正在加载交互轮次", loadingFacts: "正在加载调用事实", noOperations: "本轮未记录调用事实", originalUnavailable: "完整原文未记录，以下为摘要", outputOriginal: "本轮输出（原文）", search: "搜索问题或业务对象", select: "选择交互轮次查看调用事实", summary: "共 {{total}} 轮 · 当前 {{current}} 轮", title: "交互轮次", viewFull: "查看完整原文", viewFullInput: "查看完整本轮输入", viewFullOutput: "查看完整本轮输出" },
         status: { active: "可继续对话", completed: "已结束", failed: "失败", running: "执行中" }, timeNotRecorded: "时间未记录", undetermined: "未确定", views: { evidence: "证据链", execution: "执行链路", knowledge: "知识网络视图", timeline: "时间链视图" },
       },
     },

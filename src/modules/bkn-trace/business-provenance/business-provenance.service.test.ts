@@ -40,7 +40,7 @@ describe("EE business provenance service", () => {
   it("reads an interaction projection and its canonical Markdown from EE", async () => {
     getMock
       .mockResolvedValueOnce({ data: {
-        interaction_id: "int-1",
+        interaction_id: "int-1", interaction_question: "完整问题", interaction_result: "## 完整回答",
         conversation_context: [{ knowledge_network_id: "supply", source_interaction_id: "int-prior", source_operation_id: "op-prior" }],
         derived_facts: [{ rule: "changed_query_still_zero_result", source_operation_id: "op-0", operation_id: "op-1", element_id: "purchase_order" }],
         operations: [{ operation_id: "op-1", status: "ambiguous", query: { resources: [{ id: "resource_po", name: "supply.bkn_supply_po", object_id: "purchase_order", object_name: "采购订单" }] }, objects: [{ id: "purchase_order", name: "采购订单" }, { id: "purchase_request", name: "采购申请" }], elements: [{ kind: "property", id: "available_qty", name: "可用库存", parent_id: "inventory", field: "available_qty" }] }],
@@ -61,6 +61,7 @@ describe("EE business provenance service", () => {
       { responseType: "text" },
     );
     expect(projection.operations[0]?.operationId).toBe("op-1");
+    expect(projection).toMatchObject({ interactionQuestion: "完整问题", interactionResult: "## 完整回答" });
     expect(projection.operations[0]?.elements[0]).toMatchObject({ parentId: "inventory", field: "available_qty" });
     expect(projection.operations[0]?.objects).toEqual([{ id: "purchase_order", name: "采购订单" }, { id: "purchase_request", name: "采购申请" }]);
     expect(projection.operations[0]?.query?.resources).toEqual([{ id: "resource_po", name: "supply.bkn_supply_po", objectId: "purchase_order", objectName: "采购订单" }]);
