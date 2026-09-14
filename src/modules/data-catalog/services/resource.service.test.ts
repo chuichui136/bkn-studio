@@ -54,6 +54,25 @@ describe("resource.service · previewCatalogResource", () => {
     expect(result).toEqual({ querySource: "local_index", rows: [{ id: "r-1" }], total: 42 });
   });
 
+  it("preserves an unsafe int64 preview total", async () => {
+    postMock.mockImplementation((
+      _url: string,
+      _body: unknown,
+      config: { transformResponse?: (data: unknown) => unknown },
+    ) => Promise.resolve({
+      data: config.transformResponse?.(
+        '{"query_source":"source","entries":[],"total_count":9007199254740993}',
+      ),
+    }));
+    const { previewCatalogResource } = await import(
+      "@/modules/data-catalog/services/resource.service"
+    );
+
+    const result = await previewCatalogResource("r-1", { limit: 10, offset: 0 });
+
+    expect(result.total).toBe("9007199254740993");
+  });
+
   it("requests Binary content only when the caller forces the original source", async () => {
     postMock.mockResolvedValue({ data: { query_source: "source", entries: [], total_count: 0 } });
     const { previewCatalogResource } = await import(
@@ -180,6 +199,24 @@ describe("resource.service · listCatalogResourcePage", () => {
     vi.unstubAllEnvs();
   });
 
+  it("omits detail-only schema and scale fields in mock list responses", async () => {
+    vi.resetModules();
+    vi.stubEnv("VITE_USE_MOCK", "true");
+    const { listCatalogResourcePage } = await import(
+      "@/modules/data-catalog/services/resource.service"
+    );
+
+    const result = await listCatalogResourcePage({ limit: 1 });
+
+    expect(result.items[0]).toMatchObject({
+      columnCount: null,
+      indexConfig: undefined,
+      rowCount: null,
+      schema: [],
+      sourceMetadata: undefined,
+    });
+  });
+
   it("sends schema to the server so totals and pages are filtered consistently", async () => {
     getMock.mockResolvedValue({
       data: {
@@ -232,6 +269,7 @@ describe("resource.service · listCatalogResourcePage", () => {
         localIndexName: "bkn_res-1",
         localIndexStatus: "available",
         operations: ["view_detail", "query_data"],
+        rowCount: null,
         schemaName: "external_data",
         status: "stale",
         statusMessage: "discover metadata failed",
@@ -311,12 +349,23 @@ describe("resource.service · getCatalogResources", () => {
             id: "res-1",
             index_name: "bkn_res-1",
             index_config: {
+              default_keyword_ignore_above: 512,
               incremental_fields: ["updated_at", "revision"],
               primary_key_fields: ["tenant_id", "order_id"],
             },
             local_status: "available",
             name: "orders",
             operations: ["view_detail", "query_data"],
+            row_count: 42,
+            source_metadata: {
+              foreign_keys: [{ name: "fk_orders_customer" }],
+              indices: [{ name: "PRIMARY" }, { name: "idx_orders_updated_at" }],
+              original_description: "Orders from the source database",
+              original_name: "public.orders",
+              properties: { row_count: 999 },
+              primary_keys: ["tenant_id", "order_id"],
+              table_type: "table",
+            },
           },
         ],
       },
@@ -328,14 +377,74 @@ describe("resource.service · getCatalogResources", () => {
     await expect(getCatalogResources(["res-1"])).resolves.toEqual([
       expect.objectContaining({
         indexConfig: {
+          defaultKeywordIgnoreAbove: 512,
           incrementalFields: ["updated_at", "revision"],
           primaryKeyFields: ["tenant_id", "order_id"],
         },
         localIndexName: "bkn_res-1",
         localIndexStatus: "available",
         operations: ["view_detail", "query_data"],
+        rowCount: 42,
+        sourceMetadata: {
+          foreignKeyCount: 1,
+          indexCount: 2,
+          objectType: "table",
+          originalDescription: "Orders from the source database",
+          originalName: "public.orders",
+          primaryKeys: ["tenant_id", "order_id"],
+        },
       }),
     ]);
+  });
+
+  it("preserves an unsafe int64 row count from detail responses", async () => {
+    const rowCount = "9007199254740993";
+    getMock.mockImplementation((_: string, config: { transformResponse?: (data: unknown) => unknown }) =>
+      Promise.resolve({
+        data: config.transformResponse?.(
+          `{"entries":[{"catalog_id":"cat-1","category":"table","id":"res-1","name":"orders","row_count":${rowCount}}]}`,
+        ),
+      }),
+    );
+    const { getCatalogResources } = await import(
+      "@/modules/data-catalog/services/resource.service"
+    );
+    const { transformPrecisionSafeJSONResponse } = await import(
+      "@/framework/request/precision-safe-json"
+    );
+
+    const [resource] = await getCatalogResources(["res-1"]);
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/vega-backend/v1/resources/res-1",
+      {
+        skipErrorToast: true,
+        transformResponse: transformPrecisionSafeJSONResponse,
+      },
+    );
+    expect(resource?.rowCount).toBe(rowCount);
+  });
+
+  it("keeps missing source index and foreign-key counts unknown", async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: [{
+          catalog_id: "cat-1",
+          category: "index",
+          id: "res-1",
+          name: "orders",
+          source_metadata: { original_name: "orders-v1" },
+        }],
+      },
+    });
+    const { getCatalogResources } = await import(
+      "@/modules/data-catalog/services/resource.service"
+    );
+
+    const [resource] = await getCatalogResources(["res-1"]);
+
+    expect(resource?.sourceMetadata?.foreignKeyCount).toBeUndefined();
+    expect(resource?.sourceMetadata?.indexCount).toBeUndefined();
   });
 });
 
@@ -372,6 +481,7 @@ describe("resource.service · updateCatalogResource", () => {
       description: "",
       expectedUpdateTime: 123,
       indexConfig: {
+        defaultKeywordIgnoreAbove: 512,
         incrementalFields: ["updated_at", "revision"],
         primaryKeyFields: ["tenant_id", "request_no"],
       },
@@ -417,6 +527,7 @@ describe("resource.service · updateCatalogResource", () => {
         }),
       ],
       index_config: {
+        default_keyword_ignore_above: 512,
         default_embedding_model: undefined,
         default_fulltext_analyzer: undefined,
         incremental_fields: ["updated_at", "revision"],
@@ -424,6 +535,39 @@ describe("resource.service · updateCatalogResource", () => {
       },
       source_identifier: "orders",
     });
+  });
+
+  it("omits unsupported dataset build keys from the request", async () => {
+    putMock.mockResolvedValue({});
+    getMock.mockResolvedValue({
+      data: {
+        catalog_id: "cat-1",
+        category: "dataset",
+        id: "res-1",
+        name: "documents",
+        schema_definition: [],
+      },
+    });
+    const { updateCatalogResource } = await import(
+      "@/modules/data-catalog/services/resource.service"
+    );
+
+    await updateCatalogResource("res-1", {
+      catalogId: "cat-1",
+      category: "dataset",
+      description: "",
+      expectedUpdateTime: 123,
+      indexConfig: {
+        defaultKeywordIgnoreAbove: 512,
+      },
+      name: "documents",
+      schema: [],
+      sourceIdentifier: "documents",
+    });
+
+    const request = putMock.mock.calls[0]?.[1] as { index_config?: Record<string, unknown> };
+    expect(request.index_config).not.toHaveProperty("primary_key_fields");
+    expect(request.index_config).not.toHaveProperty("incremental_fields");
   });
 });
 

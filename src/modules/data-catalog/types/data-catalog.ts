@@ -20,6 +20,9 @@ export type ResourceStatus = "active" | "deprecated" | "stale";
 /** Whether the Resource's local OpenSearch index is currently usable for queries. */
 export type ResourceLocalIndexStatus = "available" | "stale" | "unavailable";
 
+/** Safe integers stay numeric; int64 values outside JavaScript's safe range stay decimal strings. */
+export type ResourceRowCount = number | string;
+
 /** Field-level indexing capabilities: keyword, fulltext, and vector (aligned with Vega feature_type). */
 export type ResourceFeatureType = "keyword" | "fulltext" | "vector";
 
@@ -52,10 +55,20 @@ export type ResourceSchemaField = {
 
 /** Resource-level defaults and cross-field build strategy, excluding per-field index participation. */
 export type ResourceIndexConfig = {
+  defaultKeywordIgnoreAbove?: number;
   incrementalFields?: string[];
   primaryKeyFields?: string[];
   defaultEmbeddingModel?: string;
   defaultFulltextAnalyzer?: string;
+};
+
+export type ResourceSourceMetadata = {
+  foreignKeyCount?: number;
+  indexCount?: number;
+  objectType?: string;
+  originalDescription?: string;
+  originalName?: string;
+  primaryKeys?: string[];
 };
 
 export type CatalogResource = {
@@ -80,11 +93,14 @@ export type CatalogResource = {
   name: string;
   /** Effective operations for the current account on this Resource. */
   operations?: string[];
-  rowCount: number;
+  /** Resource row count returned by Vega; null when the backend did not calculate it. */
+  rowCount: ResourceRowCount | null;
   /** Schema in the physical data source; named distinctly from the field-definition schema. */
   schemaName?: string;
   schema: ResourceSchemaField[];
   sourceIdentifier: string;
+  /** Stable, user-facing source metadata normalized from connector-specific data. */
+  sourceMetadata?: ResourceSourceMetadata;
   /** Resource lifecycle status reported by Vega. */
   status?: ResourceStatus;
   /** Resource lifecycle/discovery detail reported by Vega. */
@@ -132,7 +148,7 @@ export type ResourcePreviewQuery = {
 export type ResourcePreviewResult = {
   querySource?: "local_index" | "source";
   rows: Record<string, unknown>[];
-  total: number;
+  total: ResourceRowCount;
 };
 
 export type BuildMode = "batch" | "streaming";

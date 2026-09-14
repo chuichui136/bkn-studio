@@ -20,7 +20,6 @@ import { useNavigate } from "react-router-dom";
 
 import { useAppServices } from "@/framework/context/use-app-services";
 import { formatDateTimeYmdHms } from "@/framework/i18n/format";
-import { hasPermissions } from "@/framework/permission/has-permissions";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { AppTable } from "@/framework/ui/common/AppTable";
@@ -32,7 +31,6 @@ import { BuildTaskDetailDrawer } from "@/modules/data-catalog/components/BuildTa
 import { BuildTaskLaunchPanel } from "@/modules/data-catalog/components/BuildTaskLaunchPanel";
 import { IndexConfigFormPanel } from "@/modules/data-catalog/components/IndexConfigFormPanel";
 import { useBuildTaskActions } from "@/modules/data-catalog/hooks/use-build-task-actions";
-import { dataCatalogResourceManagePermission } from "@/modules/data-catalog/permissions";
 import { deleteBuildTask, listBuildTaskPage } from "@/modules/data-catalog/services/build-task.service";
 import { summarizeBuildTaskError } from "@/modules/data-catalog/lib/build-task-error";
 import type { ResourceIndexView } from "@/modules/data-catalog/lib/index-build-filters";
@@ -53,7 +51,7 @@ import type {
   CatalogResource,
 } from "@/modules/data-catalog/types/data-catalog";
 import { isActiveBuildTask } from "@/modules/data-catalog/utils/build-task-guards";
-import type { CatalogRecord } from "@/shared/catalog";
+import { hasCatalogOperation, type CatalogRecord } from "@/shared/catalog";
 
 import panelStyles from "./ResourceIndexPanel.module.css";
 
@@ -180,7 +178,7 @@ export function ResourceIndexPanel({
   tasks,
 }: ResourceIndexPanelProps) {
   const { i18n, t } = useTranslation();
-  const { message, modal, runtimeConfig } = useAppServices();
+  const { message, modal } = useAppServices();
   const navigate = useNavigate();
   const [taskPage, setTaskPage] = useState(1);
   const [taskPageSize, setTaskPageSize] = useState(10);
@@ -251,10 +249,7 @@ export function ResourceIndexPanel({
   const gate = resourceGateOf(catalog);
   const resourceBlockReason = resourceQueryBlockReason(resource);
   const buildActionsDisabled = !gate.ok || resourceBlockReason !== null;
-  const canModifyResource = hasPermissions({
-    currentPermissions: runtimeConfig.currentUser.permissions,
-    requiredPermissions: dataCatalogResourceManagePermission,
-  });
+  const canModifyResource = hasCatalogOperation(catalog, "resource_manage");
   const readOnly = isResourceIndexReadOnly(catalog, canModifyResource);
   const canManageBuildTasks = canManageResourceBuildTasks(resource, catalog);
   const canManageTaskActions = canManageBuildTasks;

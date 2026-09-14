@@ -13,6 +13,7 @@ import {
 import { transformPrecisionSafeJSONResponse } from "@/framework/request/precision-safe-json";
 import i18n from "@/app/locales/i18n";
 import { postCatalogDiscover } from "@/shared/catalog";
+import { resourceCountForPagination } from "@/modules/data-catalog/lib/resource-count";
 import {
   emitMockChange,
   formatMockTimestamp,
@@ -36,6 +37,7 @@ import type {
   ResourcePreviewQuery,
   ResourcePreviewResult,
   ResourceSchemaField,
+  ResourceSourceMetadata,
   ResourceUpdateInput,
 } from "@/modules/data-catalog/types/data-catalog";
 
@@ -64,6 +66,7 @@ type BackendSchemaField = {
 };
 
 type BackendIndexConfig = {
+  default_keyword_ignore_above?: number;
   incremental_fields?: string[];
   primary_key_fields?: string[];
   default_embedding_model?: string;
@@ -118,8 +121,15 @@ function mapIndexConfigToBackend(
   }
 
   return {
-    incremental_fields: config.incrementalFields,
-    primary_key_fields: config.primaryKeyFields,
+    ...(config.defaultKeywordIgnoreAbove !== undefined
+      ? { default_keyword_ignore_above: config.defaultKeywordIgnoreAbove }
+      : {}),
+    ...(config.incrementalFields !== undefined
+      ? { incremental_fields: config.incrementalFields }
+      : {}),
+    ...(config.primaryKeyFields !== undefined
+      ? { primary_key_fields: config.primaryKeyFields }
+      : {}),
     default_fulltext_analyzer: config.defaultFulltextAnalyzer,
     default_embedding_model: config.defaultEmbeddingModel,
   };
@@ -133,6 +143,9 @@ function mapIndexConfigFromBackend(
   }
 
   return {
+    ...(config.default_keyword_ignore_above !== undefined
+      ? { defaultKeywordIgnoreAbove: config.default_keyword_ignore_above }
+      : {}),
     incrementalFields: config.incremental_fields,
     primaryKeyFields: config.primary_key_fields,
     defaultFulltextAnalyzer: config.default_fulltext_analyzer,
@@ -202,7 +215,6 @@ function mapSchemaField(field: BackendSchemaField): ResourceSchemaField {
 type BackendResourceSummary = {
   catalog_id: string;
   category?: string;
-  column_count?: number;
   create_time?: number;
   creator?: { id?: string; name?: string };
   description?: string;
@@ -214,7 +226,6 @@ type BackendResourceSummary = {
   logic_type?: string;
   name: string;
   operations?: string[];
-  row_count?: number;
   schema?: string;
   source_identifier?: string;
   status?: string;
@@ -225,12 +236,17 @@ type BackendResourceSummary = {
 };
 
 type BackendResourceDetailFields = {
+  column_count?: number;
   index_config?: BackendIndexConfig | null;
+  row_count?: number | string;
   schema_definition?: BackendSchemaField[] | null;
   source_metadata?: {
-    properties?: {
-      row_count?: number;
-    };
+    foreign_keys?: unknown[];
+    indices?: unknown[];
+    original_description?: string;
+    original_name?: string;
+    primary_keys?: string[];
+    table_type?: string;
   } | null;
 };
 
@@ -302,6 +318,23 @@ function normalizeLocalIndexStatus(value?: string): CatalogResource["localIndexS
   }
 }
 
+function mapSourceMetadata(
+  metadata?: BackendResourceDetailFields["source_metadata"],
+): ResourceSourceMetadata | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+
+  return {
+    foreignKeyCount: metadata.foreign_keys?.length,
+    indexCount: metadata.indices?.length,
+    objectType: metadata.table_type?.trim() || undefined,
+    originalDescription: metadata.original_description?.trim() || undefined,
+    originalName: metadata.original_name?.trim() || undefined,
+    primaryKeys: metadata.primary_keys?.map((key) => key.trim()).filter(Boolean),
+  };
+}
+
 function mapResource(item: BackendResourceSummary & Partial<BackendResourceDetailFields>): CatalogResource {
   return {
     id: item.id,
@@ -318,10 +351,10 @@ function mapResource(item: BackendResourceSummary & Partial<BackendResourceDetai
     lastDiscoverStatus: normalizeDiscoverStatus(item.last_discover_status),
     localIndexName: item.index_name?.trim() || undefined,
     localIndexStatus: normalizeLocalIndexStatus(item.local_status),
-    // List endpoints omit schema_definition, so use backend column_count; detail endpoints fall back to schema length.
+    sourceMetadata: mapSourceMetadata(item.source_metadata),
+    // Scale fields and schema_definition are detail-only; list resources map them to null and an empty schema.
     columnCount: item.column_count ?? item.schema_definition?.length ?? null,
-    // Backend often omits top-level row_count; actual rows are in source_metadata.properties.
-    rowCount: item.row_count ?? item.source_metadata?.properties?.row_count ?? 0,
+    rowCount: item.row_count ?? null,
     schemaName: item.schema,
     status: normalizeResourceStatus(item.status),
     statusMessage: item.status_message?.trim() || undefined,
@@ -363,8 +396,16 @@ export async function listCatalogResourcePage(
 
   if (useMock) {
     const filtered = filterResources([...mockResources], query);
+    const page = limit === -1 ? filtered.slice(offset) : filtered.slice(offset, offset + limit);
     return wait({
-      items: limit === -1 ? filtered.slice(offset) : filtered.slice(offset, offset + limit),
+      items: page.map((resource) => ({
+        ...resource,
+        columnCount: null,
+        indexConfig: undefined,
+        rowCount: null,
+        schema: [],
+        sourceMetadata: undefined,
+      })),
       total: filtered.length,
     });
   }
@@ -445,7 +486,10 @@ export async function getCatalogResources(ids: string[]) {
     const chunk = uniqueIds.slice(index, index + 50);
     const response = await http.get<{ entries?: BackendResource[] }>(
       `/vega-backend/v1/resources/${chunk.join(",")}`,
-      { skipErrorToast: true },
+      {
+        skipErrorToast: true,
+        transformResponse: transformPrecisionSafeJSONResponse,
+      },
     );
     resources.push(...(response.data.entries ?? []).map(mapResource));
   }
@@ -474,7 +518,7 @@ export async function createCatalogResource(input: ResourceCreateInput) {
               { name: "updated_at", type: "datetime" },
             ],
       columnCount: input.schema.length > 0 ? input.schema.length : 3,
-      rowCount: 0,
+      rowCount: input.category === "dataset" ? 0 : null,
       expectedUpdateTime: Date.now(),
       updateTime: formatMockTimestamp(Date.now()),
     };
@@ -512,7 +556,7 @@ export async function createCatalogResource(input: ResourceCreateInput) {
       operations: response.data.operations,
       schema: input.schema,
       columnCount: input.schema.length,
-      rowCount: 0,
+      rowCount: input.category === "dataset" ? 0 : null,
       expectedUpdateTime: Date.now(),
       updateTime: formatMockTimestamp(Date.now()),
     }
@@ -736,7 +780,7 @@ export async function previewCatalogResource(
       return wait({ rows: [], total: 0 });
     }
 
-    const total = resource.rowCount;
+    const total = resourceCountForPagination(resource.rowCount);
     const count = Math.max(0, Math.min(query.limit, total - query.offset));
     const usesLocalIndex = !query.ignoreLocalIndex &&
       resource.category === "table" &&
@@ -760,7 +804,7 @@ export async function previewCatalogResource(
   const response = await http.post<{
     query_source?: "local_index" | "source";
     entries?: Record<string, unknown>[];
-    total_count?: number;
+    total_count?: number | string;
   }>(
     `/vega-backend/v1/resources/${id}/data`,
     {
