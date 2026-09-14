@@ -93,6 +93,8 @@ export type BusinessProvenanceDerivedFact = {
 
 export type BusinessProvenanceInteraction = {
   interactionId: string;
+  interactionQuestion?: string;
+  interactionResult?: string;
   operations: OperationResolution[];
   conversationContext: Array<{ knowledgeNetworkId: string; sourceInteractionId: string; sourceOperationId: string }>;
   derivedFacts: BusinessProvenanceDerivedFact[];
@@ -152,6 +154,8 @@ export async function getBusinessProvenanceInteractions(
 export async function getBusinessProvenanceInteraction(interactionId: string): Promise<BusinessProvenanceInteraction> {
   const response = await http.get<{
     interaction_id?: string;
+    interaction_question?: string;
+    interaction_result?: string;
     conversation_context?: Array<{ knowledge_network_id?: string; source_interaction_id?: string; source_operation_id?: string }>;
     derived_facts?: Array<{ rule?: string; source_operation_id?: string; operation_id?: string; element_id?: string }>;
     context_relations?: Array<{ knowledge_network_id?: string; id?: string; name?: string; source_object_id?: string; target_object_id?: string }>;
@@ -162,6 +166,8 @@ export async function getBusinessProvenanceInteraction(interactionId: string): P
   }>(`${EE_PROVENANCE_PREFIX}/interactions/${encodeURIComponent(interactionId)}`, { headers: provenanceHeaders() });
   return {
     interactionId: response.data.interaction_id ?? interactionId,
+    interactionQuestion: response.data.interaction_question,
+    interactionResult: response.data.interaction_result,
     conversationContext: (response.data.conversation_context ?? []).map((context) => ({ knowledgeNetworkId: context.knowledge_network_id ?? "", sourceInteractionId: context.source_interaction_id ?? "", sourceOperationId: context.source_operation_id ?? "" })),
     derivedFacts: (response.data.derived_facts ?? []).map((fact) => ({ rule: fact.rule ?? "", sourceOperationId: fact.source_operation_id ?? "", operationId: fact.operation_id ?? "", elementId: fact.element_id ?? "" })),
     contextRelations: (response.data.context_relations ?? []).map((relation) => ({ knowledgeNetworkId: relation.knowledge_network_id ?? "", id: relation.id ?? "", name: relation.name, sourceObjectId: relation.source_object_id ?? "", targetObjectId: relation.target_object_id ?? "" })),

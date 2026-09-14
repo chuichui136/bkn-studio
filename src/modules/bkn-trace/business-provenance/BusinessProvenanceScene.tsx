@@ -6,12 +6,13 @@
  */
 
 import { CloseOutlined, CopyOutlined, DownloadOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import { Button, Empty, Input, Result, Segmented, Select, Table, Tag, Typography, message } from "antd";
+import { Button, Empty, Input, Popover, Result, Segmented, Select, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import i18n from "@/app/locales/i18n";
+import { MarkdownText } from "@/framework/ui/common/MarkdownText";
 import {
   getBusinessProvenanceAnalysisHistory,
   getBusinessProvenanceConversations,
@@ -84,11 +85,49 @@ function operationTitle(operation: OperationResolution) {
 function operationCondition(operation: OperationResolution) {
   const condition = operation.query?.conditions;
   if ((condition === undefined || condition === null) && operation.query?.sql) return bpText("operation.sqlConditionBelow");
-  if (condition === undefined || condition === null) return bpText("operation.conditionNotRecorded");
+  if (condition === undefined || condition === null) return recordedPayload(operation.input) === undefined ? bpText("operation.conditionNotRecorded") : bpText("operation.recordedInputAvailable");
   if (typeof condition === "string") return condition;
   if (typeof condition === "object") return Object.entries(condition as Record<string, unknown>).map(([key, value]) => `${key} = ${conditionValue(value)}`).join(bpText("conditionSeparator"));
   if (typeof condition === "number" || typeof condition === "boolean") return String(condition);
   return bpText("operation.conditionNotRecorded");
+}
+
+function recordedPayload(value: unknown): unknown {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "object" || Array.isArray(value)) return value;
+  const envelope = value as Record<string, unknown>;
+  if (envelope.mode === "inline") return envelope.inline;
+  return value;
+}
+
+function payloadText(value: unknown) {
+  const content = recordedPayload(value);
+  if (content === undefined) return undefined;
+  if (typeof content === "string") return content;
+  return JSON.stringify(content, null, 2);
+}
+
+function SourceText({
+  title,
+  preview,
+  original,
+  viewLabel,
+  onCopy,
+}: {
+  title: string;
+  preview?: string;
+  original?: string;
+  viewLabel: string;
+  onCopy: (value: string) => void;
+}) {
+  const text = original || preview || bpText("notRecorded");
+  return <Popover
+    trigger={["hover", "click"]}
+    overlayClassName={styles.sourceTextPopover}
+    content={<section className={styles.sourceTextPopoverContent}><h4>{title}</h4><MarkdownText text={text} variant="document" /><Button size="small" icon={<CopyOutlined />} onClick={() => onCopy(text)}>{bpText("detail.copyPayload")}</Button></section>}
+  >
+    <button type="button" className={styles.sourceTextPreview} aria-label={viewLabel}><span>{preview || bpText("notRecorded")}</span><small>{bpText("rounds.viewFull")}</small></button>
+  </Popover>;
 }
 
 function resourceDescription(operation: OperationResolution) {
@@ -114,6 +153,7 @@ function operationResult(operation: OperationResolution, derivedFacts: BusinessP
   if (operation.error) return bpText("operation.failedResult");
   if (derivedFacts.some((fact) => fact.rule === "changed_query_still_zero_result" && fact.operationId === operation.operationId)) return bpText("operation.changedQueryNoResult");
   if (operation.query?.resultCount !== undefined) return operation.query.resultCount === 0 ? bpText("operation.zeroRows") : bpText("operation.rows", { count: operation.query.resultCount });
+  if (operation.callStatus === "completed" && recordedPayload(operation.output) !== undefined) return bpText("operation.recordedOutputAvailable");
   return operation.callStatus === "completed" ? bpText("operation.completedUnknownSize") : bpText("operation.resultNotRecorded");
 }
 
@@ -350,6 +390,18 @@ export function BusinessProvenanceScene() {
     message.success(bpText("agent.markdownCopied"));
   }, [analysisMarkdown, selectedInteraction]);
 
+  const copyPayload = useCallback(async (value: unknown) => {
+    const content = payloadText(value);
+    if (!content) return;
+    await navigator.clipboard?.writeText(content);
+    message.success(bpText("detail.payloadCopied"));
+  }, []);
+
+  const copySourceText = useCallback((value: string) => {
+    void navigator.clipboard?.writeText(value);
+    message.success(bpText("detail.payloadCopied"));
+  }, []);
+
   const downloadMarkdown = useCallback(() => {
     if (!selectedInteraction || !analysisMarkdown) return;
     const url = URL.createObjectURL(new Blob([analysisMarkdown], { type: "text/markdown;charset=utf-8" }));
@@ -442,7 +494,10 @@ export function BusinessProvenanceScene() {
         {projection ? <>
           <section className={styles.interactionSummary}>
             <header><span>{bpText("roundLabel", { index: Math.max(1, interactions.findIndex((item) => item.interactionId === selectedInteraction?.interactionId) + 1) })}</span><h2>{selectedInteraction?.questionPreview || bpText("roundQuestionNotRecorded")}</h2><small>{selectedConversation.agentName || bpText("agentNotRecorded")} · {formatTime(selectedInteraction?.startedAt)} · {formatDuration(selectedInteraction?.durationMs)} · {bpText("callCount", { count: projection.operations.length })} · {statusLabel(selectedInteraction?.status)}</small></header>
-            <div className={styles.sourceTexts}><div><h4>{bpText("rounds.inputOriginal")}</h4><p>{selectedInteraction?.questionPreview || bpText("inputNotRecorded")}</p></div><div><h4>{bpText("rounds.outputOriginal")}</h4><p>{selectedInteraction?.resultPreview || bpText("resultNotRecorded")}</p></div></div>
+            <div className={styles.sourceTexts}>
+              <div><h4>{bpText("rounds.inputOriginal")}</h4><SourceText title={bpText("rounds.inputOriginal")} preview={selectedInteraction?.questionPreview} original={projection.interactionQuestion} viewLabel={bpText("rounds.viewFullInput")} onCopy={copySourceText} /></div>
+              <div><h4>{bpText("rounds.outputOriginal")}</h4><SourceText title={bpText("rounds.outputOriginal")} preview={selectedInteraction?.resultPreview} original={projection.interactionResult} viewLabel={bpText("rounds.viewFullOutput")} onCopy={copySourceText} /></div>
+            </div>
             <footer><Button icon={<CopyOutlined />} disabled={analysisMarkdownLoading || !analysisMarkdown} onClick={() => void copyMarkdown()}>{bpText("actions.copyMarkdown")}</Button><Button icon={<DownloadOutlined />} disabled={analysisMarkdownLoading || !analysisMarkdown} onClick={() => void downloadMarkdown()}>{bpText("actions.downloadMarkdown")}</Button><Button type="primary" onClick={() => { setDetailOperation(undefined); setKnowledgeSelection(undefined); setAnalysisPanelOpen(true); }}>{bpText("actions.analyze")}</Button></footer>
           </section>
           <Segmented className={styles.viewSwitch} value={view} onChange={(value) => { setView(value as View); setDetailOperation(undefined); }} options={[{ label: bpText("views.timeline"), value: "timeline" }, { label: bpText("views.knowledge"), value: "knowledge" }]} />
@@ -484,6 +539,9 @@ export function BusinessProvenanceScene() {
       <section><h4>{bpText("detail.how")}</h4><dl><dt>{bpText("detail.interface")}</dt><dd>{detailOperation.toolName || bpText("notRecorded")}</dd><dt>{bpText("detail.condition")}</dt><dd>{operationCondition(detailOperation)}</dd><dt>{bpText("detail.resource")}</dt><dd>{resourceDescription(detailOperation)}</dd></dl></section>
       <section><h4>{bpText("detail.properties")}</h4>{propertyDescriptions(detailOperation).length ? propertyDescriptions(detailOperation).map((item) => <p key={item}>{item}</p>) : <p>{bpText("detail.noProperties")}</p>}</section>
       <section><h4>{bpText("detail.actualResult")}</h4><p>{operationResult(detailOperation, projection?.derivedFacts)}</p></section>
+      {payloadText(detailOperation.input) ? <section><h4>{bpText("detail.recordedInput")}</h4><pre>{payloadText(detailOperation.input)}</pre><Button size="small" icon={<CopyOutlined />} onClick={() => void copyPayload(detailOperation.input)}>{bpText("detail.copyPayload")}</Button></section> : null}
+      {payloadText(detailOperation.output) ? <section><h4>{bpText("detail.recordedOutput")}</h4><pre>{payloadText(detailOperation.output)}</pre><Button size="small" icon={<CopyOutlined />} onClick={() => void copyPayload(detailOperation.output)}>{bpText("detail.copyPayload")}</Button></section> : null}
+      {payloadText(detailOperation.error) ? <section><h4>{bpText("detail.recordedError")}</h4><pre>{payloadText(detailOperation.error)}</pre><Button size="small" icon={<CopyOutlined />} onClick={() => void copyPayload(detailOperation.error)}>{bpText("detail.copyPayload")}</Button></section> : null}
       {detailOperation.query?.sql ? <section><h4>SQL</h4><pre>{detailOperation.query.sql}</pre></section> : null}
     </aside> : null}
     {analysisPanelOpen ? (

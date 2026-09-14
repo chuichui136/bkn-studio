@@ -37,7 +37,7 @@ export const bknTraceEnUS = {
         conditionSeparator: "; ", conversation: { title: "Business conversation", titleWithAgent: "{{agent}} business conversation" },
         decision: { changeRequired: "Optimization required", noChange: "No optimization currently identified", notEvaluable: "Insufficient facts to evaluate" },
         detail: {
-          actualResult: "Actual result", binding: "Resolution", businessElement: "Business element", businessObject: "Business object", candidateObjects: "Candidate business objects", close: "Close call details", condition: "Condition",
+          actualResult: "Actual result", binding: "Resolution", businessElement: "Business element", businessObject: "Business object", candidateObjects: "Candidate business objects", close: "Close call details", condition: "Condition", copyPayload: "Copy original", payloadCopied: "Original copied", recordedError: "Recorded error", recordedInput: "Recorded input", recordedOutput: "Recorded output",
           conversationContext: "Conversation context", how: "How it was called", interface: "API", noProperties: "This call was not deterministically resolved to properties, fields, or logic.", properties: "Properties and fields",
           relationActionMetric: "Relations / actions / metrics", resource: "Resource", roundCall: "Business call in this interaction", what: "What it did",
         },
@@ -55,12 +55,12 @@ export const bknTraceEnUS = {
         list: { description: "Start from user questions and business results to inspect how Agents call business knowledge networks and form conclusions.", empty: "No business conversations", title: "Business Provenance", total: "{{count}} total" },
         listSeparator: ", ", networkUnresolved: "Knowledge network not resolved", none: "None.", notRecorded: "Not recorded", notReturned: "Not returned",
         operation: {
-          call: "Call", changedQueryNoResult: "No matching records after changing the query.", completedUnknownSize: "Call completed; result size was not recorded.", conditionNotRecorded: "Input condition not recorded", detail: "Call details",
+          call: "Call", changedQueryNoResult: "No matching records after changing the query.", completedUnknownSize: "Call completed; result size was not recorded.", conditionNotRecorded: "Input condition not recorded", detail: "Call details", recordedInputAvailable: "Recorded input; view details", recordedOutputAvailable: "Recorded result; view details",
           exploreSchema: "Explore knowledge network schema", failedResult: "Call failed; error facts are recorded with this call.", findNetwork: "Find business knowledge network", queryElements: "Query {{elements}}", queryObject: "Query business object",
           resourceNotRecorded: "No resource binding was recorded in this interaction", resultNotRecorded: "Result not recorded.", rows: "Returned {{count}} rows.", runSql: "Run data query", sqlConditionBelow: "See full SQL below for conditions", zeroRows: "Returned 0 rows.",
         },
         questionNotRecorded: "Question not recorded", resultNotRecorded: "Business result not recorded", roundLabel: "Interaction {{index}}", roundQuestionNotRecorded: "Question for this interaction not recorded",
-        rounds: { input: "Interaction input", inputOriginal: "Interaction input (original)", outputOriginal: "Interaction output (original)", search: "Search question or business object", select: "Select an interaction to inspect call facts", summary: "{{total}} interactions · current {{current}}", title: "Interactions" },
+        rounds: { input: "Interaction input", inputOriginal: "Interaction input (original)", outputOriginal: "Interaction output (original)", search: "Search question or business object", select: "Select an interaction to inspect call facts", summary: "{{total}} interactions · current {{current}}", title: "Interactions", viewFull: "View full original", viewFullInput: "View full interaction input", viewFullOutput: "View full interaction output" },
         status: { completed: "Completed", failed: "Failed", running: "In progress" }, timeNotRecorded: "Time not recorded", undetermined: "Undetermined", views: { knowledge: "Knowledge Network", timeline: "Timeline" },
       },
     },
