@@ -5,7 +5,7 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AxiosError, AxiosHeaders } from "axios";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -131,9 +131,11 @@ describe("DataCatalogScene", () => {
 
     await waitFor(() => expect(listCatalogsMock).toHaveBeenCalledTimes(1));
     expect(listCatalogsMock).toHaveBeenCalledWith({
+      direction: "asc",
       keyword: "",
       page: 1,
       pageSize: 100,
+      sort: "name",
       type: "logical",
     });
     fireEvent.click(screen.getByRole("button", { name: "select catalog" }));
@@ -204,9 +206,11 @@ describe("DataCatalogScene", () => {
 
     await waitFor(() => expect(listCatalogsMock).toHaveBeenCalledWith({
       connectorType: "postgresql",
+      direction: "asc",
       keyword: "",
       page: 1,
       pageSize: 100,
+      sort: "name",
       type: "physical",
     }));
     expect(screen.getByTestId("catalog-ids").textContent).toBe("catalog-1");
@@ -250,11 +254,15 @@ describe("DataCatalogScene", () => {
       id: `first-${index}`,
       name: `first-${index}`,
     }));
-    const secondPage = [catalog, ...Array.from({ length: 99 }, (_, index) => ({
-      ...catalog,
-      id: `second-${index}`,
-      name: `second-${index}`,
-    }))];
+    const secondPage = [
+      { ...catalog, id: "second-before", name: "before-selected" },
+      catalog,
+      ...Array.from({ length: 98 }, (_, index) => ({
+        ...catalog,
+        id: `second-${index}`,
+        name: `second-${index}`,
+      })),
+    ];
     listCatalogsMock.mockImplementation((query: CatalogListQuery) => Promise.resolve(
       query.type !== "physical"
         ? { items: [], total: 0 }
@@ -278,19 +286,151 @@ describe("DataCatalogScene", () => {
     await waitFor(() => expect(screen.getByTestId("catalog-ids").textContent).toBe("catalog-1"));
     fireEvent.click(screen.getByRole("button", { name: "load physical" }));
     await waitFor(() => expect(screen.getByTestId("catalog-ids").textContent?.split(",")).toHaveLength(101));
+    expect(screen.getByTestId("catalog-ids").textContent?.split(",").at(-1)).toBe("catalog-1");
 
     fireEvent.click(screen.getByRole("button", { name: "load more physical" }));
     await waitFor(() => expect(screen.getByTestId("catalog-ids").textContent?.split(",")).toHaveLength(200));
 
     const catalogIDs = screen.getByTestId("catalog-ids").textContent?.split(",") ?? [];
     expect(catalogIDs.filter((id) => id === "catalog-1")).toHaveLength(1);
+    expect(catalogIDs.slice(99, 103)).toEqual([
+      "first-99",
+      "second-before",
+      "catalog-1",
+      "second-0",
+    ]);
     expect(listCatalogsMock).toHaveBeenCalledWith({
       connectorType: "postgresql",
+      direction: "asc",
       keyword: "",
       page: 2,
       pageSize: 100,
+      sort: "name",
       type: "physical",
     });
+  });
+
+  it("keeps a paginated catalog in place when a later page resolves before its hydration", async () => {
+    let resolveCatalog: (value: CatalogRecord) => void;
+    let resolveFirstPage: (value: { items: CatalogRecord[]; total: number }) => void;
+    let resolveSecondPage: (value: { items: CatalogRecord[]; total: number }) => void;
+    const beforeCatalog = { ...catalog, id: "before", name: "before" };
+    const afterCatalog = { ...catalog, id: "after", name: "after" };
+    const lastCatalog = { ...catalog, id: "last", name: "last" };
+
+    getCatalogMock.mockReturnValue(new Promise<CatalogRecord>((resolve) => {
+      resolveCatalog = resolve;
+    }));
+    listCatalogsMock.mockImplementation((query: CatalogListQuery) => {
+      if (query.type !== "physical") {
+        return Promise.resolve({ items: [], total: 0 });
+      }
+      return new Promise((resolve) => {
+        if (query.page === 1) {
+          resolveFirstPage = resolve;
+        } else {
+          resolveSecondPage = resolve;
+        }
+      });
+    });
+    listCatalogConnectorTypeStatsMock.mockResolvedValue([{
+      catalogCount: 4,
+      catalogType: "physical",
+      connectorType: "postgresql",
+    }]);
+
+    render(
+      <MemoryRouter initialEntries={["/data-catalog/catalog/catalog-1"]}>
+        <DataCatalogScene selection={{ id: "catalog-1", type: "catalog" }} suppressAutoSelect />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getCatalogMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "load physical" }));
+    await waitFor(() => expect(listCatalogsMock).toHaveBeenCalledWith(expect.objectContaining({
+      page: 1,
+      type: "physical",
+    })));
+
+    act(() => {
+      resolveFirstPage!({ items: [beforeCatalog, catalog, afterCatalog], total: 4 });
+    });
+    await waitFor(() => expect(screen.getByTestId("catalog-ids").textContent).toBe(
+      "before,catalog-1,after",
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "load more physical" }));
+    await waitFor(() => expect(listCatalogsMock).toHaveBeenCalledWith(expect.objectContaining({
+      page: 2,
+      type: "physical",
+    })));
+    await act(async () => {
+      resolveSecondPage!({ items: [lastCatalog], total: 4 });
+      await Promise.resolve();
+      resolveCatalog!(catalog);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByTestId("catalog-ids").textContent).toBe(
+      "before,catalog-1,after,last",
+    ));
+  });
+
+  it("keeps a paginated catalog in place when its hydration resolves before the same page", async () => {
+    let resolveCatalog: (value: CatalogRecord) => void;
+    let resolveFirstPage: (value: { items: CatalogRecord[]; total: number }) => void;
+    const beforeCatalog = { ...catalog, id: "before", name: "before" };
+    const afterCatalog = { ...catalog, id: "after", name: "after" };
+    const lastCatalog = { ...catalog, id: "last", name: "last" };
+
+    getCatalogMock.mockReturnValue(new Promise<CatalogRecord>((resolve) => {
+      resolveCatalog = resolve;
+    }));
+    listCatalogsMock.mockImplementation((query: CatalogListQuery) => {
+      if (query.type !== "physical") {
+        return Promise.resolve({ items: [], total: 0 });
+      }
+      if (query.page === 1) {
+        return new Promise((resolve) => {
+          resolveFirstPage = resolve;
+        });
+      }
+      return Promise.resolve({ items: [lastCatalog], total: 4 });
+    });
+    listCatalogConnectorTypeStatsMock.mockResolvedValue([{
+      catalogCount: 4,
+      catalogType: "physical",
+      connectorType: "postgresql",
+    }]);
+
+    render(
+      <MemoryRouter initialEntries={["/data-catalog/catalog/catalog-1"]}>
+        <DataCatalogScene selection={{ id: "catalog-1", type: "catalog" }} suppressAutoSelect />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getCatalogMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "load physical" }));
+    await waitFor(() => expect(listCatalogsMock).toHaveBeenCalledWith(expect.objectContaining({
+      page: 1,
+      type: "physical",
+    })));
+
+    await act(async () => {
+      resolveCatalog!(catalog);
+      await Promise.resolve();
+      resolveFirstPage!({ items: [beforeCatalog, catalog, afterCatalog], total: 4 });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.getByTestId("catalog-ids").textContent).toBe(
+      "before,catalog-1,after",
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "load more physical" }));
+
+    await waitFor(() => expect(screen.getByTestId("catalog-ids").textContent).toBe(
+      "before,catalog-1,after,last",
+    ));
   });
 
   it("filters catalog statistics with the current search keyword", async () => {
@@ -306,9 +446,11 @@ describe("DataCatalogScene", () => {
 
     await waitFor(() => expect(listCatalogConnectorTypeStatsMock).toHaveBeenCalledWith("orders"));
     expect(listCatalogsMock).toHaveBeenCalledWith({
+      direction: "asc",
       keyword: "orders",
       page: 1,
       pageSize: 100,
+      sort: "name",
       type: "logical",
     });
   });
@@ -325,9 +467,11 @@ describe("DataCatalogScene", () => {
 
     await waitFor(() => expect(listCatalogConnectorTypeStatsMock).toHaveBeenLastCalledWith(""));
     expect(listCatalogsMock).toHaveBeenLastCalledWith({
+      direction: "asc",
       keyword: "",
       page: 1,
       pageSize: 100,
+      sort: "name",
       type: "logical",
     });
   });
@@ -459,9 +603,11 @@ describe("DataCatalogScene", () => {
     fireEvent.click(screen.getByRole("button", { name: "load physical" }));
     await waitFor(() => expect(listCatalogsMock).toHaveBeenCalledWith({
       connectorType: "postgresql",
+      direction: "asc",
       keyword: "",
       page: 1,
       pageSize: 100,
+      sort: "name",
       type: "physical",
     }));
     fireEvent.click(screen.getByRole("button", { name: "enter search keyword" }));
@@ -558,9 +704,11 @@ describe("DataCatalogScene", () => {
     );
 
     await waitFor(() => expect(listCatalogsMock).toHaveBeenCalledWith({
+      direction: "asc",
       keyword: "",
       page: 1,
       pageSize: 100,
+      sort: "name",
       type: "logical",
     }));
     fireEvent.click(screen.getByRole("button", { name: "enter search keyword" }));

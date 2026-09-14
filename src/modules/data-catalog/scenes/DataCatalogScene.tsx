@@ -50,6 +50,73 @@ export type DataCatalogSceneProps = {
   suppressAutoSelect?: boolean;
 };
 
+function catalogPageScope(type: CatalogRecord["type"], connectorType: string) {
+  return type === "physical" ? `${type}:${connectorType}` : type;
+}
+
+function recordPaginatedCatalogs(
+  paginatedCatalogScopes: Map<string, string>,
+  pageItems: CatalogRecord[],
+  type: CatalogRecord["type"],
+  connectorType: string,
+  replaceLoadedPageItems: boolean,
+) {
+  const scope = catalogPageScope(type, connectorType);
+  if (replaceLoadedPageItems) {
+    paginatedCatalogScopes.forEach((catalogScope, catalogId) => {
+      if (catalogScope === scope) {
+        paginatedCatalogScopes.delete(catalogId);
+      }
+    });
+  }
+  pageItems.forEach((catalog) => paginatedCatalogScopes.set(catalog.id, scope));
+}
+
+function mergeCatalogPage(
+  current: CatalogRecord[],
+  pageItems: CatalogRecord[],
+  type: CatalogRecord["type"],
+  connectorType: string,
+  replaceLoadedPageItems: boolean,
+  hydratedCatalogIds: Set<string>,
+) {
+  const belongsToPageScope = (catalog: CatalogRecord) => (
+    catalog.type === type
+    && (type !== "physical" || catalog.connectorType === connectorType)
+  );
+  const pageIds = new Set(pageItems.map((catalog) => catalog.id));
+
+  const outsidePageScope = current.filter(
+    (catalog) => !belongsToPageScope(catalog) && !pageIds.has(catalog.id),
+  );
+  const loadedPageItems = replaceLoadedPageItems
+    ? []
+    : current.filter((catalog) => (
+      belongsToPageScope(catalog)
+      && !hydratedCatalogIds.has(catalog.id)
+      && !pageIds.has(catalog.id)
+    ));
+  const pendingHydratedItems = current.filter((catalog) => (
+    belongsToPageScope(catalog)
+    && hydratedCatalogIds.has(catalog.id)
+    && !pageIds.has(catalog.id)
+  ));
+  const catalogIds = new Set<string>();
+
+  return [
+    ...outsidePageScope,
+    ...loadedPageItems,
+    ...pageItems,
+    ...pendingHydratedItems,
+  ].filter((catalog) => {
+    if (catalogIds.has(catalog.id)) {
+      return false;
+    }
+    catalogIds.add(catalog.id);
+    return true;
+  });
+}
+
 export function DataCatalogScene({
   selection,
   suppressAutoSelect = false,
@@ -84,6 +151,8 @@ export function DataCatalogScene({
   const [resourceTotal, setResourceTotal] = useState(0);
   const initialLoadRef = useRef(false);
   const catalogQueryGeneration = useRef(0);
+  const hydratedCatalogIds = useRef(new Set<string>());
+  const paginatedCatalogScopes = useRef(new Map<string, string>());
 
   const selectedCatalog = useMemo(() => {
     if (selection?.type === "catalog") {
@@ -105,16 +174,39 @@ export function DataCatalogScene({
     applyKeyword = false,
   ) => {
     const [logicalCatalogResult, statsResult] = await Promise.all([
-      listCatalogs({ keyword, page: 1, pageSize: CATALOG_PAGE_SIZE, type: "logical" }),
+      listCatalogs({
+        direction: "asc",
+        keyword,
+        page: 1,
+        pageSize: CATALOG_PAGE_SIZE,
+        sort: "name",
+        type: "logical",
+      }),
       listCatalogConnectorTypeStats(keyword),
     ]);
     if (generation !== catalogQueryGeneration.current) {
       return false;
     }
-    setCatalogs((current) => [
-      ...(preservePhysicalCatalogs ? current.filter((catalog) => catalog.type !== "logical") : []),
-      ...logicalCatalogResult.items,
-    ]);
+    if (!preservePhysicalCatalogs) {
+      hydratedCatalogIds.current.clear();
+      paginatedCatalogScopes.current.clear();
+    }
+    recordPaginatedCatalogs(
+      paginatedCatalogScopes.current,
+      logicalCatalogResult.items,
+      "logical",
+      "",
+      true,
+    );
+    logicalCatalogResult.items.forEach((catalog) => hydratedCatalogIds.current.delete(catalog.id));
+    setCatalogs((current) => mergeCatalogPage(
+      preservePhysicalCatalogs ? current : [],
+      logicalCatalogResult.items,
+      "logical",
+      "",
+      true,
+      hydratedCatalogIds.current,
+    ));
     if (applyKeyword) {
       setCatalogKeyword(keyword);
     }
@@ -128,30 +220,32 @@ export function DataCatalogScene({
     const pageOffset = Math.floor(offset / CATALOG_PAGE_SIZE) * CATALOG_PAGE_SIZE;
     const result = await listCatalogs({
       connectorType,
+      direction: "asc",
       keyword: catalogKeyword,
       page: pageOffset / CATALOG_PAGE_SIZE + 1,
       pageSize: CATALOG_PAGE_SIZE,
+      sort: "name",
       type,
     });
     if (generation !== catalogQueryGeneration.current) {
       return;
     }
-    setCatalogs((current) => {
-      const next = [
-        ...current.filter((catalog) =>
-        pageOffset > 0 || catalog.type !== type || (type === "physical" && catalog.connectorType !== connectorType),
-        ),
-        ...result.items,
-      ];
-      const catalogIDs = new Set<string>();
-      return next.filter((catalog) => {
-        if (catalogIDs.has(catalog.id)) {
-          return false;
-        }
-        catalogIDs.add(catalog.id);
-        return true;
-      });
-    });
+    recordPaginatedCatalogs(
+      paginatedCatalogScopes.current,
+      result.items,
+      type,
+      connectorType,
+      pageOffset === 0,
+    );
+    result.items.forEach((catalog) => hydratedCatalogIds.current.delete(catalog.id));
+    setCatalogs((current) => mergeCatalogPage(
+      current,
+      result.items,
+      type,
+      connectorType,
+      pageOffset === 0,
+      hydratedCatalogIds.current,
+    ));
   }, [catalogKeyword]);
 
   const loadCatalogSchemas = useCallback(async (catalogId: string) => {
@@ -255,9 +349,17 @@ export function DataCatalogScene({
         ) {
           return;
         }
-        setCatalogs((current) => (
-          current.some((item) => item.id === catalog.id) ? current : [...current, catalog]
-        ));
+        if (paginatedCatalogScopes.current.has(catalog.id)) {
+          return;
+        }
+        hydratedCatalogIds.current.add(catalog.id);
+        setCatalogs((current) => {
+          if (current.some((item) => item.id === catalog.id)) {
+            hydratedCatalogIds.current.delete(catalog.id);
+            return current;
+          }
+          return [...current, catalog];
+        });
       })
       .catch(async (error) => {
         if (isRequestForbidden(error)) {
