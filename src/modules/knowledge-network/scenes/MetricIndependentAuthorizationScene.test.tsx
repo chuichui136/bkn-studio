@@ -5,7 +5,7 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,8 +58,16 @@ vi.mock("@/modules/knowledge-network/components/shared/KnowledgeNetworkObjectAut
 }));
 
 vi.mock("@/modules/knowledge-network/components/metric/MetricDataQueryPanel", () => ({
-  MetricDataQueryPanel: ({ propertyOptions }: { propertyOptions?: Array<{ name: string }> }) => (
-    <div data-testid="metric-query-fields">{propertyOptions?.map((item) => item.name).join(",")}</div>
+  MetricDataQueryPanel: ({
+    canQueryData = true,
+    propertyOptions,
+  }: {
+    canQueryData?: boolean;
+    propertyOptions?: Array<{ name: string }>;
+  }) => (
+    <div data-can-query={String(canQueryData)} data-testid="metric-query-fields">
+      {propertyOptions?.map((item) => item.name).join(",")}
+    </div>
   ),
 }));
 
@@ -119,5 +127,22 @@ describe("metric independent authorization scenes", () => {
     expect(serviceMocks.getMetric).toHaveBeenCalledWith("kn-1", "metric-1");
     expect(serviceMocks.getObjectTypeDetail).not.toHaveBeenCalled();
     expect(serviceMocks.listObjectTypes).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["detail", <MetricDetailScene key="detail" metricId="metric-1" networkId="kn-1" />],
+    ["query", <MetricDataQueryScene key="query" metricId="metric-1" networkId="kn-1" />],
+  ])("passes a denied %s metric query to the shared panel", async (name, scene) => {
+    serviceMocks.getMetric.mockResolvedValueOnce({ ...metric, operations: ["view_detail"] });
+
+    render(<MemoryRouter>{scene}</MemoryRouter>);
+
+    if (name === "detail") {
+      fireEvent.click(await screen.findByText("knowledgeNetwork.metricDataQuery"));
+    }
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metric-query-fields").dataset.canQuery).toBe("false");
+    });
   });
 });
