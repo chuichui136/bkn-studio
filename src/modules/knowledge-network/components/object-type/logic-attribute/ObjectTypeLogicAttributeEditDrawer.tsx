@@ -187,6 +187,9 @@ export function ObjectTypeLogicAttributeEditDrawer({
         comment: attrInfo.comment,
         displayName: attrInfo.displayName,
         name: attrInfo.name,
+        // Function is the only logical-property kind.  Older incomplete records
+        // still need a type so the user can select a function and save again.
+        type: "tool",
       });
     } else {
       form.resetFields();
@@ -306,13 +309,14 @@ export function ObjectTypeLogicAttributeEditDrawer({
       return;
     }
 
-    const parameters = extractLeafParams(normalizeFunctionParameterSources(settingList))
-      .map((item) => {
+    const parameters = normalizeFunctionParameterSources(
+      extractLeafParams(settingList).map((item) => {
         const { error, children, ...parameter } = item;
         void error;
         void children;
         return parameter;
-      });
+      }),
+    );
 
     onOk({
       comment: formValues.comment,
