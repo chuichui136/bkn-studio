@@ -19,7 +19,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { useAppServices } from "@/framework/context/use-app-services";
-import { useRuntimeConfig } from "@/framework/context/use-runtime-config";
 import { formatDateTimeYmdHms } from "@/framework/i18n/format";
 import { hasPermissions } from "@/framework/permission/has-permissions";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
@@ -181,8 +180,7 @@ export function ResourceIndexPanel({
   tasks,
 }: ResourceIndexPanelProps) {
   const { i18n, t } = useTranslation();
-  const { message, modal } = useAppServices();
-  const runtimeConfig = useRuntimeConfig();
+  const { message, modal, runtimeConfig } = useAppServices();
   const navigate = useNavigate();
   const [taskPage, setTaskPage] = useState(1);
   const [taskPageSize, setTaskPageSize] = useState(10);
