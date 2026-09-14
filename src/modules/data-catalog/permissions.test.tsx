@@ -12,7 +12,10 @@ import { deriveStudioPermissions, flattenSafeGrants } from "@/framework/auth/per
 import { hasPermissions } from "@/framework/permission/has-permissions";
 import { dataCatalogModuleManifest } from "@/modules/data-catalog/module.manifest";
 import { dataCatalogNavigation } from "@/modules/data-catalog/navigation";
-import { catalogDetailPermissions } from "@/modules/data-catalog/permissions";
+import {
+  catalogDetailPermissions,
+  dataCatalogResourceManagePermission,
+} from "@/modules/data-catalog/permissions";
 import { dataCatalogRoutes } from "@/modules/data-catalog/routes";
 
 type SafeGrant = { operations: string[]; resource: { id: string; type: string } };
@@ -90,6 +93,18 @@ describe("data-catalog permission points", () => {
     ]) {
       expect(dataCatalogModuleManifest.permissions).not.toContain(dead);
     }
+  });
+
+  it("derives catalog resource management from the declared catalog permission", () => {
+    const viewOnly = permissionsOf([
+      { resource: { type: "resource", id: "resource-1" }, operations: ["view_detail"] },
+    ]);
+    const manager = permissionsOf([
+      { resource: { type: "catalog", id: "catalog-1" }, operations: ["resource_manage"] },
+    ]);
+
+    expect(viewOnly).not.toContain(dataCatalogResourceManagePermission);
+    expect(manager).toContain(dataCatalogResourceManagePermission);
   });
 
   it("the task-management menu entry and list route are public entry points", () => {

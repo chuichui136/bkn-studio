@@ -33,6 +33,7 @@ import { BuildTaskDetailDrawer } from "@/modules/data-catalog/components/BuildTa
 import { BuildTaskLaunchPanel } from "@/modules/data-catalog/components/BuildTaskLaunchPanel";
 import { IndexConfigFormPanel } from "@/modules/data-catalog/components/IndexConfigFormPanel";
 import { useBuildTaskActions } from "@/modules/data-catalog/hooks/use-build-task-actions";
+import { dataCatalogResourceManagePermission } from "@/modules/data-catalog/permissions";
 import { deleteBuildTask, listBuildTaskPage } from "@/modules/data-catalog/services/build-task.service";
 import { summarizeBuildTaskError } from "@/modules/data-catalog/lib/build-task-error";
 import type { ResourceIndexView } from "@/modules/data-catalog/lib/index-build-filters";
@@ -251,7 +252,11 @@ export function ResourceIndexPanel({
   const gate = resourceGateOf(catalog);
   const resourceBlockReason = resourceQueryBlockReason(resource);
   const buildActionsDisabled = !gate.ok || resourceBlockReason !== null;
-  const readOnly = isResourceIndexReadOnly(catalog);
+  const canModifyResource = hasPermissions({
+    currentPermissions: runtimeConfig.currentUser.permissions,
+    requiredPermissions: dataCatalogResourceManagePermission,
+  });
+  const readOnly = isResourceIndexReadOnly(catalog, canModifyResource);
   const canManageBuildTasks = canManageResourceBuildTasks(resource, catalog);
   const canManageTaskActions =
     canManageBuildTasks &&
@@ -537,6 +542,14 @@ export function ResourceIndexPanel({
   const renderConfigTab = () => (
     <>
       {gateBanner}
+      {!canModifyResource ? (
+        <Alert
+          className={panelStyles.statusAlert}
+          message={t("dataCatalog.build.configReadOnly")}
+          showIcon
+          type="info"
+        />
+      ) : null}
       <div className={panelStyles.configureCard}>
         <IndexConfigFormPanel
           active={active && indexView === "config"}

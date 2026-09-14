@@ -5,10 +5,10 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const listAuthorizableObjectsMock = vi.hoisted(() => vi.fn());
+const listAuthorizableObjectsPageMock = vi.hoisted(() => vi.fn());
 const listUsersMock = vi.hoisted(() => vi.fn());
 const listUsersPageMock = vi.hoisted(() => vi.fn());
 const upsertObjectGrantMock = vi.hoisted(() => vi.fn());
@@ -48,7 +48,7 @@ vi.mock("@/modules/system-admin/services/admin.service", () => ({
 }));
 
 vi.mock("@/modules/system-admin/services/authz.service", () => ({
-  listAuthorizableObjects: listAuthorizableObjectsMock,
+  listAuthorizableObjectsPage: listAuthorizableObjectsPageMock,
   upsertObjectGrant: upsertObjectGrantMock,
 }));
 
@@ -64,9 +64,9 @@ describe("ObjectAuthorizationCreateScene object picker", () => {
     capability.current = "available";
     listUsersMock.mockResolvedValue([]);
     listUsersPageMock.mockResolvedValue({ total: 0, users: [] });
-    listAuthorizableObjectsMock.mockResolvedValue([
-      { id: "catalog-1", name: "Customer data", type: "catalog" },
-    ]);
+    listAuthorizableObjectsPageMock.mockResolvedValue({
+      items: [{ id: "catalog-1", name: "Customer data", type: "catalog" }], total: 1,
+    });
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       addEventListener: vi.fn(),
       addListener: vi.fn(),
@@ -90,14 +90,14 @@ describe("ObjectAuthorizationCreateScene object picker", () => {
     expect(screen.queryByText("systemAdmin.objectGrants.modeFineDescription")).toBeNull();
     expect(screen.getByRole("button", { name: /common\.back/ })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "common.cancel" })).toBeNull();
-    expect(listAuthorizableObjectsMock).not.toHaveBeenCalled();
+    expect(listAuthorizableObjectsPageMock).not.toHaveBeenCalled();
 
     const [typePicker] = screen.getAllByRole("combobox");
     fireEvent.mouseDown(typePicker);
     fireEvent.click(await screen.findByText("数据目录"));
     await act(async () => {});
 
-    expect(listAuthorizableObjectsMock).toHaveBeenCalledWith("catalog");
+    expect(listAuthorizableObjectsPageMock).toHaveBeenCalledWith("catalog", { keyword: "", page: 0 });
   });
 
   it("omits model resources while keeping execution-factory resources", async () => {
@@ -117,9 +117,9 @@ describe("ObjectAuthorizationCreateScene object picker", () => {
   });
 
   it("keeps the operation code visible and explains a locked prerequisite separately", async () => {
-    listAuthorizableObjectsMock.mockResolvedValue([
-      { id: "operator-1", name: "Order settlement", type: "operator" },
-    ]);
+    listAuthorizableObjectsPageMock.mockResolvedValue({
+      items: [{ id: "operator-1", name: "Order settlement", type: "operator" }], total: 1,
+    });
     render(<ObjectAuthorizationCreateScene />);
     await act(async () => {});
 
@@ -183,6 +183,45 @@ describe("ObjectAuthorizationCreateScene object picker", () => {
 
     expect(screen.getByText("systemAdmin.objectGrants.summaryReady")).not.toBeNull();
     expect(confirmButton.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("keeps the selected object's name when a server search excludes it", async () => {
+    listUsersMock.mockResolvedValue([
+      { account: "li.mubai", id: "user-1", name: "Mubai Li" },
+    ]);
+    listUsersPageMock.mockResolvedValue({
+      total: 1,
+      users: [{ account: "li.mubai", id: "user-1", name: "Mubai Li" }],
+    });
+    listAuthorizableObjectsPageMock.mockImplementation(
+      (_type: string, { keyword }: { keyword: string }) => Promise.resolve(
+        keyword === "missing"
+          ? { items: [], total: 0 }
+          : { items: [{ id: "catalog-1", name: "Customer data", type: "catalog" }], total: 1 },
+      ),
+    );
+    render(<ObjectAuthorizationCreateScene />);
+    await act(async () => {});
+
+    const [typePicker] = screen.getAllByRole("combobox");
+    fireEvent.mouseDown(typePicker);
+    fireEvent.click(screen.getByText("数据目录"));
+    await act(async () => {});
+
+    const [, objectPicker] = screen.getAllByRole("combobox");
+    fireEvent.mouseDown(objectPicker);
+    fireEvent.click(await screen.findByText("Customer data"));
+
+    fireEvent.change(objectPicker, { target: { value: "missing" } });
+    await waitFor(() => {
+      expect(listAuthorizableObjectsPageMock).toHaveBeenLastCalledWith(
+        "catalog", { keyword: "missing", page: 0 },
+      );
+    });
+
+    // The summary is derived from selectedObject and would show the raw ID if
+    // the selected metadata were lost while replacing the search candidates.
+    expect(screen.getByText("Customer data", { selector: "dd" })).not.toBeNull();
   });
 
   it("falls back to the Community full-package mode and hides child resource types", async () => {

@@ -25,6 +25,13 @@ import {
 
 const PAGE_SIZE = 100;
 
+export const AUTHZ_OBJECT_PAGE_SIZE = PAGE_SIZE;
+
+export type AuthorizableObjectPage = {
+  items: AuthorizableObject[];
+  total: number;
+};
+
 // Maximum IDs per batch URL. Legacy Vega/MCP APIs put comma-separated IDs in the path, so batching
 // avoids gateway URL limits and confines a missing ID's 404 to its own batch (50 UUIDs are ~1.8 KB).
 const NAME_ID_BATCH = 50;
@@ -106,6 +113,18 @@ export async function listDomainObjects(type?: string, keyword = ""): Promise<Au
     : AUTHZ_OBJECT_PICKER_TYPES;
   const settled = await Promise.allSettled(types.map((item) => listOne(item, keyword)));
   return settled.flatMap((result) => (result.status === "fulfilled" ? result.value.objects : []));
+}
+
+/** Lists one picker type through its domain API. Errors deliberately propagate so the picker can retry. */
+export async function listDomainObjectsPage(
+  type: string,
+  { keyword = "", page = 0 }: { keyword?: string; page?: number } = {},
+): Promise<AuthorizableObjectPage> {
+  if (!isAuthzObjectPickerType(type)) {
+    return { items: [], total: 0 };
+  }
+  const result = await listOne(type, keyword, page * PAGE_SIZE, PAGE_SIZE);
+  return { items: result.objects, total: result.total };
 }
 
 /**

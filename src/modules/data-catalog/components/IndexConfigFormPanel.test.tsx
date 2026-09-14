@@ -173,6 +173,21 @@ describe("IndexConfigFormPanel", () => {
     expect(screen.queryByText("dataCatalog.build.configCanBuild")).toBeNull();
   });
 
+  it("does not submit index configuration when read-only", async () => {
+    render(
+      <MemoryRouter>
+        <IndexConfigFormPanel active readOnly resource={resource} />
+      </MemoryRouter>,
+    );
+
+    const saveButton = await screen.findByRole("button", {
+      name: "dataCatalog.build.saveIndexConfig",
+    });
+    expect(saveButton.getAttribute("disabled")).not.toBeNull();
+    fireEvent.click(saveButton);
+    expect(updateCatalogResourceMock).not.toHaveBeenCalled();
+  });
+
   it("preserves freshly generated semantic metadata when saving index config", async () => {
     const configuredResource: CatalogResource = {
       ...resource,
