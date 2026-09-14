@@ -175,6 +175,15 @@
   overflow: hidden;
 }
 
+/* The user list is paginated, so its rows should take their natural height and share the
+ * workspace's single vertical scrollbar. Keep a table-local scroll only where a scene explicitly
+ * needs a fixed-height log viewport. */
+.userTableSection {
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
+}
+
 .auditExplorer {
   grid-template-columns: 280px minmax(0, 1fr);
   width: 100%;
