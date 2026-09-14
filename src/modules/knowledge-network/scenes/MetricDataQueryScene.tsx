@@ -22,6 +22,7 @@ import type {
   KnowledgeNetworkMetricRecord,
 } from "@/modules/knowledge-network/types/knowledge-network";
 import { toPublishedMetricPropertyOptions } from "@/modules/knowledge-network/utils/metric-property-display";
+import { hasKnowledgeNetworkRecordOperation } from "@/modules/knowledge-network/utils/record-operations";
 
 import styles from "./MetricDetailScene.module.css";
 
@@ -96,6 +97,7 @@ export function MetricDataQueryScene({
       <MetricDataQueryPanel
         analysisDimensionOptions={detail.calculationFormula.analysisDimensions ?? []}
         boundObjectTypeId={detail.scopeType === "object_type" ? detail.scopeRef : undefined}
+        canQueryData={hasKnowledgeNetworkRecordOperation(detail, "query_data")}
         metricId={detail.id}
         metricName={detail.name}
         networkId={networkId}
