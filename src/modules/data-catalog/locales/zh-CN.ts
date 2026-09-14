@@ -466,6 +466,7 @@ export const dataCatalogZhCN = {
       saveIndexConfig: "保存索引配置",
       saveConfigSuccess: "索引配置已保存",
       unsavedIndexConfig: "索引配置有未保存的修改，请点击「保存索引配置」后再发起构建。",
+      configReadOnly: "当前仅可查看索引配置；需要资源修改权限才能编辑或保存。",
       needConfigFirst: "请先在 「配置索引」 中完成配置再构建。",
       editTitle: "配置索引",
       editSubmit: "开始构建",

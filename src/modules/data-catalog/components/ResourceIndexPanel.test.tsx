@@ -14,8 +14,10 @@ import type { BuildTask, CatalogResource } from "@/modules/data-catalog/types/da
 
 import styles from "./shared.module.css";
 
-const { listBuildTaskPageMock } = vi.hoisted(() => ({
+const { indexConfigFormPanelMock, listBuildTaskPageMock, permissionsMock } = vi.hoisted(() => ({
+  indexConfigFormPanelMock: vi.fn(),
   listBuildTaskPageMock: vi.fn(),
+  permissionsMock: ["catalog:task_manage"],
 }));
 
 vi.mock("@/modules/data-catalog/services/build-task.service", async (importOriginal) => ({
@@ -51,7 +53,7 @@ vi.mock("@/framework/permission/PermissionGate", () => ({
 
 vi.mock("@/framework/context/use-app-services", () => ({
   useAppServices: () => ({
-    runtimeConfig: { currentUser: { permissions: ["catalog:task_manage"] } },
+    runtimeConfig: { currentUser: { permissions: permissionsMock } },
   }),
 }));
 
@@ -98,7 +100,12 @@ vi.mock("@/modules/data-catalog/components/BuildTaskLaunchPanel", () => ({
     <button onClick={onStarted} type="button">start task</button>
   ),
 }));
-vi.mock("@/modules/data-catalog/components/IndexConfigFormPanel", () => ({ IndexConfigFormPanel: () => null }));
+vi.mock("@/modules/data-catalog/components/IndexConfigFormPanel", () => ({
+  IndexConfigFormPanel: (props: unknown) => {
+    indexConfigFormPanelMock(props);
+    return null;
+  },
+}));
 vi.mock("@/modules/data-catalog/hooks/use-build-task-actions", () => ({
   useBuildTaskActions: () => ({ pauseOrResume: vi.fn(), remove: vi.fn(), retry: vi.fn() }),
 }));
@@ -147,7 +154,55 @@ function buildTask(overrides: Partial<BuildTask>): BuildTask {
 describe("ResourceIndexPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    permissionsMock.splice(0, permissionsMock.length, "catalog:task_manage");
     listBuildTaskPageMock.mockResolvedValue({ items: [], total: 0 });
+  });
+
+  it("renders index configuration read-only without resource modify permission", () => {
+    render(
+      <MemoryRouter>
+        <ResourceIndexPanel
+          active
+          catalog={null}
+          indexView="config"
+          indexViewExplicit
+          onIndexViewChange={vi.fn()}
+          onRefresh={vi.fn()}
+          resource={resource}
+          tasks={[]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("dataCatalog.build.configReadOnly")).toBeTruthy();
+    expect(indexConfigFormPanelMock).toHaveBeenCalledWith(expect.objectContaining({
+      hideBuildControls: true,
+      readOnly: true,
+    }));
+  });
+
+  it("keeps index configuration editable with resource modify permission", () => {
+    permissionsMock.push("resource:modify");
+    render(
+      <MemoryRouter>
+        <ResourceIndexPanel
+          active
+          catalog={null}
+          indexView="config"
+          indexViewExplicit
+          onIndexViewChange={vi.fn()}
+          onRefresh={vi.fn()}
+          resource={resource}
+          tasks={[]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("dataCatalog.build.configReadOnly")).toBeNull();
+    expect(indexConfigFormPanelMock).toHaveBeenCalledWith(expect.objectContaining({
+      hideBuildControls: false,
+      readOnly: false,
+    }));
   });
 
   it("does not present a batch task total as the current index document count", () => {

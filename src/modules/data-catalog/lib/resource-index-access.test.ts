@@ -23,6 +23,10 @@ describe("resource index access", () => {
     expect(isResourceIndexReadOnly(catalog(true))).toBe(true);
     expect(isResourceIndexReadOnly(catalog(false))).toBe(false);
   });
+  it("keeps resources read-only without resource modify permission", () => {
+    expect(isResourceIndexReadOnly(catalog(false), false)).toBe(true);
+    expect(isResourceIndexReadOnly(catalog(false), true)).toBe(false);
+  });
 
   it("does not allow dataset resources to create build tasks", () => {
     expect(canManageResourceBuildTasks(resource("dataset"), catalog(false))).toBe(false);

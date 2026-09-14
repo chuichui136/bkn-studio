@@ -466,6 +466,7 @@ export const dataCatalogEnUS = {
       saveIndexConfig: "Save Index Config",
       saveConfigSuccess: "Index config saved",
       unsavedIndexConfig: "Index config has unsaved changes. Save it before starting a build.",
+      configReadOnly: "Index configuration is read-only. Resource modify permission is required to edit or save it.",
       needConfigFirst: "Complete the configuration under Configure Index before starting a build.",
       editTitle: "Configure Index",
       editSubmit: "Start Build",

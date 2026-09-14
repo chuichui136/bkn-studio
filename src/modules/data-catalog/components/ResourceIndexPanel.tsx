@@ -251,7 +251,11 @@ export function ResourceIndexPanel({
   const gate = resourceGateOf(catalog);
   const resourceBlockReason = resourceQueryBlockReason(resource);
   const buildActionsDisabled = !gate.ok || resourceBlockReason !== null;
-  const readOnly = isResourceIndexReadOnly(catalog);
+  const canModifyResource = hasPermissions({
+    currentPermissions: runtimeConfig.currentUser.permissions,
+    requiredPermissions: "resource:modify",
+  });
+  const readOnly = isResourceIndexReadOnly(catalog, canModifyResource);
   const canManageBuildTasks = canManageResourceBuildTasks(resource, catalog);
   const canManageTaskActions =
     canManageBuildTasks &&
@@ -537,6 +541,14 @@ export function ResourceIndexPanel({
   const renderConfigTab = () => (
     <>
       {gateBanner}
+      {!canModifyResource ? (
+        <Alert
+          className={panelStyles.statusAlert}
+          message={t("dataCatalog.build.configReadOnly")}
+          showIcon
+          type="info"
+        />
+      ) : null}
       <div className={panelStyles.configureCard}>
         <IndexConfigFormPanel
           active={active && indexView === "config"}
