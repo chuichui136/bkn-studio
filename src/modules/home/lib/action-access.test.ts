@@ -26,10 +26,20 @@ describe("canAccessHomeAction", () => {
   it("keeps non-navigation actions permission-gated", () => {
     expect(
       canAccessHomeAction([], {
-        path: "/data-connect/discover",
+        path: "/some-protected-action",
         permissions: "catalog:task_manage",
       }),
     ).toBe(false);
+  });
+
+  it("keeps guarded Vega navigation entries permission-gated", () => {
+    const action = {
+      path: "/data-connect",
+      permissions: "catalog:task_manage",
+    };
+
+    expect(canAccessHomeAction([], action)).toBe(false);
+    expect(canAccessHomeAction(["catalog:task_manage"], action)).toBe(true);
   });
 
   it("blocks a permission-gated action without a required permission", () => {

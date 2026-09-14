@@ -39,6 +39,7 @@ const resource: CatalogResource = {
   description: "",
   id: "resource-1",
   name: "orders",
+  operations: ["modify", "query_data", "view_detail"],
   rowCount: 1,
   schemaName: "public",
   schema: [
@@ -192,6 +193,21 @@ describe("ResourceDetailPanel", () => {
 
     expect(screen.queryByText("dataCatalog.resource.sourceMetadata")).toBeNull();
     expect(screen.queryByText("dataCatalog.resource.schemaName")).toBeNull();
+  });
+
+  it("keeps a resource read-only when its parent catalog cannot modify resources", () => {
+    render(
+      <MemoryRouter>
+        <ResourceDetailPanel
+          active
+          canEdit={false}
+          catalog={null}
+          resource={{ ...resource, operations: ["view_detail"] }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("button", { name: "dataCatalog.resource.editFields" })).toBeNull();
   });
 
   it("refreshes the resource version after an update conflict", async () => {

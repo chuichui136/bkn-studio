@@ -17,9 +17,6 @@ export type HomeActionAccess = {
 };
 
 const NAVIGATION_ENTRY_PATHS = new Set([
-  "/data-connect",
-  "/data-catalog",
-  "/task-management",
   "/knowledge-network",
   "/knowledge-network/integration",
   "/execution-factory/units",

@@ -28,13 +28,14 @@ import { hasPermissions } from "@/framework/permission/has-permissions";
 import {
   extractRequestErrorMessage,
   isRequestConflict,
+  isRequestForbidden,
 } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { AppTable } from "@/framework/ui/common/AppTable";
 import { EmptyStatePanel } from "@/framework/ui/common/EmptyStatePanel";
 import { TablePaginationBar } from "@/framework/ui/common/TablePaginationBar";
 import { TableSurface } from "@/framework/ui/common/TableSurface";
-import { listCatalogs } from "@/shared/catalog";
+import { getCatalog, hasCatalogOperation } from "@/shared/catalog";
 import {
   createDataConnectDiscoverSchedule,
   deleteDataConnectDiscoverTask,
@@ -70,7 +71,6 @@ import taskStyles from "@/framework/ui/common/TaskDetailDrawer.module.css";
 import styles from "./DataConnectDiscoverScene.module.css";
 
 const useMock = import.meta.env.VITE_USE_MOCK !== "false";
-
 type ScheduleModalState =
   | { mode: "create"; scheduleId?: undefined }
   | { mode: "edit"; scheduleId: string }
@@ -101,13 +101,11 @@ export function DataConnectDiscoverScene({
   activeTab: controlledActiveTab,
   catalogId,
   onBackToConnections,
-  onCatalogIdChange,
   onTabChange,
 }: DataConnectDiscoverSceneProps) {
   const { t } = useTranslation();
   const { message, modal, runtimeConfig } = useAppServices();
   const navigate = useNavigate();
-  const [catalogLocked] = useState(() => Boolean(catalogId));
   const [internalActiveTab, setInternalActiveTab] = useState<DataConnectDiscoverTab>("tasks");
   const activeTab = controlledActiveTab ?? internalActiveTab;
   const changeActiveTab = useCallback((nextTab: DataConnectDiscoverTab) => {
@@ -116,9 +114,7 @@ export function DataConnectDiscoverScene({
   }, [onTabChange]);
   const [keyword, setKeyword] = useState("");
   const debouncedKeyword = useDebouncedValue(keyword.trim());
-  const [catalogKeyword, setCatalogKeyword] = useState("");
-  const debouncedCatalogKeyword = useDebouncedValue(catalogKeyword.trim());
-  const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>(catalogId);
+  const selectedCatalogId = catalogId;
   const [enabledFilter, setEnabledFilter] =
     useState<EnabledFilterValue>("all");
   const [taskStatusFilter, setTaskStatusFilter] =
@@ -140,10 +136,15 @@ export function DataConnectDiscoverScene({
   const [taskTotal, setTaskTotal] = useState(0);
   const [loadingSchedules, setLoadingSchedules] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
-  const [loadingCatalogs, setLoadingCatalogs] = useState(false);
+  const [catalogsLoaded, setCatalogsLoaded] = useState(false);
+  const [catalogAccessDenied, setCatalogAccessDenied] = useState(false);
+  const [authorizedCatalogId, setAuthorizedCatalogId] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const catalogRequestIdRef = useRef(0);
+  const scheduleRequestIdRef = useRef(0);
+  const taskRequestIdRef = useRef(0);
   const [scheduleModalState, setScheduleModalState] =
     useState<ScheduleModalState>(null);
   const [scheduleModalSubmitting, setScheduleModalSubmitting] = useState(false);
@@ -154,6 +155,10 @@ export function DataConnectDiscoverScene({
   const [runNowSubmitting, setRunNowSubmitting] = useState(false);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [selectedTaskKeys, setSelectedTaskKeys] = useState<string[]>([]);
+  const catalogInteractionIdentityRef = useRef({ catalogId: selectedCatalogId });
+  if (catalogInteractionIdentityRef.current.catalogId !== selectedCatalogId) {
+    catalogInteractionIdentityRef.current = { catalogId: selectedCatalogId };
+  }
   const canManageCatalogTasks = hasPermissions({
     currentPermissions: runtimeConfig.currentUser.permissions,
     requiredPermissions: "catalog:task_manage",
@@ -167,6 +172,7 @@ export function DataConnectDiscoverScene({
 
   const handleBatchDeleteTasks = () => {
     if (!batchDeleteTaskTargets.length) return;
+    const catalogIdentity = catalogInteractionIdentityRef.current;
     void modal.confirm({
       title: t("dataCatalog.task.batchDeleteConfirmTitle", { count: batchDeleteTaskTargets.length }),
       content: t("dataCatalog.task.batchDeleteConfirmContent"),
@@ -174,9 +180,11 @@ export function DataConnectDiscoverScene({
       cancelText: t("common.cancel"),
       okButtonProps: { danger: true },
       onOk: async () => {
+        if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
         const results = await Promise.allSettled(
           batchDeleteTaskTargets.map((task) => deleteDataConnectDiscoverTask(task.id)),
         );
+        if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
         const failed = results.filter((result) => result.status === "rejected").length;
         if (failed) {
           message.error(
@@ -195,8 +203,8 @@ export function DataConnectDiscoverScene({
   };
   const editingScheduleIdentityKey = scheduleModalState
     ? scheduleModalState.mode === "edit"
-      ? `edit:${scheduleModalState.scheduleId}`
-      : "create"
+      ? `${selectedCatalogId}:edit:${scheduleModalState.scheduleId}`
+      : `${selectedCatalogId}:create`
     : null;
   const editingScheduleIdentityRef = useRef({
     generation: 0,
@@ -217,6 +225,12 @@ export function DataConnectDiscoverScene({
   const selectedCatalogName = selectedCatalogId
     ? catalogNameMap.get(selectedCatalogId)
     : undefined;
+  const catalogAccessConfirmed = Boolean(
+    catalogsLoaded &&
+    authorizedCatalogId === selectedCatalogId &&
+    !catalogError &&
+    !catalogAccessDenied,
+  );
 
   const hasActiveTasks = useMemo(
     () => tasks.some((item) => item.status === "pending" || item.status === "running"),
@@ -229,25 +243,42 @@ export function DataConnectDiscoverScene({
     [tasks],
   );
   const loadCatalogs = useCallback(async () => {
-    setLoadingCatalogs(true);
+    const requestId = ++catalogRequestIdRef.current;
+    setCatalogsLoaded(false);
+    setCatalogAccessDenied(false);
+    setAuthorizedCatalogId(null);
     setCatalogError(null);
 
     try {
-      const result = await listCatalogs({
-        keyword: debouncedCatalogKeyword,
-        page: 1,
-        pageSize: 50,
-        type: "physical",
-      });
-      setCatalogs(result.items);
+      const catalog = await getCatalog(selectedCatalogId, { skipErrorToast: true });
+      if (catalogRequestIdRef.current !== requestId) return;
+      const allowed = Boolean(catalog && hasCatalogOperation(catalog, "task_manage"));
+      setCatalogs(allowed && catalog ? [catalog] : []);
+      setCatalogAccessDenied(!allowed);
+      setAuthorizedCatalogId(allowed ? selectedCatalogId : null);
     } catch (error) {
-      setCatalogError(extractRequestErrorMessage(error));
+      if (catalogRequestIdRef.current !== requestId) return;
+      const accessDenied = isRequestForbidden(error);
+      setCatalogs([]);
+      setCatalogAccessDenied(accessDenied);
+      setAuthorizedCatalogId(null);
+      if (!accessDenied) {
+        setCatalogError(extractRequestErrorMessage(error));
+      }
     } finally {
-      setLoadingCatalogs(false);
+      if (catalogRequestIdRef.current === requestId) {
+        setCatalogsLoaded(true);
+      }
     }
-  }, [debouncedCatalogKeyword]);
+  }, [selectedCatalogId]);
 
   const loadSchedules = useCallback(async () => {
+    const catalogIdentity = catalogInteractionIdentityRef.current;
+    if (catalogIdentity.catalogId !== selectedCatalogId) return;
+    const requestId = ++scheduleRequestIdRef.current;
+    const isCurrentRequest = () =>
+      scheduleRequestIdRef.current === requestId &&
+      catalogInteractionIdentityRef.current === catalogIdentity;
     setLoadingSchedules(true);
     setScheduleError(null);
 
@@ -260,18 +291,28 @@ export function DataConnectDiscoverScene({
         page: schedulePage,
         pageSize: schedulePageSize,
       });
+      if (!isCurrentRequest()) return;
       setSchedules(result.items);
       setScheduleTotal(result.total);
     } catch (error) {
+      if (!isCurrentRequest()) return;
       setSchedules([]);
       setScheduleTotal(0);
       setScheduleError(extractRequestErrorMessage(error));
     } finally {
-      setLoadingSchedules(false);
+      if (isCurrentRequest()) {
+        setLoadingSchedules(false);
+      }
     }
   }, [debouncedKeyword, enabledFilter, schedulePage, schedulePageSize, selectedCatalogId]);
 
   const loadTasks = useCallback(async () => {
+    const catalogIdentity = catalogInteractionIdentityRef.current;
+    if (catalogIdentity.catalogId !== selectedCatalogId) return;
+    const requestId = ++taskRequestIdRef.current;
+    const isCurrentRequest = () =>
+      taskRequestIdRef.current === requestId &&
+      catalogInteractionIdentityRef.current === catalogIdentity;
     setLoadingTasks(true);
     setTaskError(null);
 
@@ -287,14 +328,18 @@ export function DataConnectDiscoverScene({
         triggerType:
           taskTriggerTypeFilter === "all" ? undefined : taskTriggerTypeFilter,
       });
+      if (!isCurrentRequest()) return;
       setTasks(result.items);
       setTaskTotal(result.total);
     } catch (error) {
+      if (!isCurrentRequest()) return;
       setTasks([]);
       setTaskTotal(0);
       setTaskError(extractRequestErrorMessage(error));
     } finally {
-      setLoadingTasks(false);
+      if (isCurrentRequest()) {
+        setLoadingTasks(false);
+      }
     }
   }, [
     selectedCatalogId,
@@ -348,7 +393,15 @@ export function DataConnectDiscoverScene({
 
   const runDiscover = useCallback(
     async (targetCatalogId: string, strategy?: DataConnectDiscoverSchedule["strategy"]) => {
+      const catalogIdentity = catalogInteractionIdentityRef.current;
+      if (catalogIdentity.catalogId !== targetCatalogId) return null;
       const result = await triggerDataConnectDiscover(targetCatalogId, strategy);
+      if (
+        catalogInteractionIdentityRef.current !== catalogIdentity ||
+        catalogIdentity.catalogId !== targetCatalogId
+      ) {
+        return null;
+      }
       void message.success(t("dataConnect.discoverTriggerSuccess"));
       setDetailTaskId(result.id);
       changeActiveTab("tasks");
@@ -363,29 +416,41 @@ export function DataConnectDiscoverScene({
   }, [loadCatalogs]);
 
   useEffect(() => {
-    void loadSchedules();
-  }, [loadSchedules]);
-
-  useEffect(() => {
-    void loadTasks();
-  }, [loadTasks]);
-
-  useEffect(() => {
-    setSelectedCatalogId(catalogId);
-  }, [catalogId]);
-
-  useEffect(() => {
-    onCatalogIdChange?.(selectedCatalogId);
-  }, [onCatalogIdChange, selectedCatalogId]);
-
-  useEffect(() => {
+    scheduleRequestIdRef.current += 1;
+    taskRequestIdRef.current += 1;
+    setSchedules([]);
+    setScheduleTotal(0);
+    setScheduleError(null);
+    setLoadingSchedules(false);
+    setTasks([]);
+    setTaskTotal(0);
+    setTaskError(null);
+    setLoadingTasks(false);
     setSelectedTaskKeys([]);
     setDetailTaskId(null);
     setTaskStatusFilter([]);
     setTaskStrategyFilter(undefined);
     setTaskTriggerTypeFilter("all");
     setTaskPage(1);
+    setScheduleModalState(null);
+    setScheduleModalSubmitting(false);
+    setEditingSchedule(null);
+    setTriggeringScheduleId(null);
+    setRunNowOpen(false);
+    setRunNowSubmitting(false);
   }, [selectedCatalogId]);
+
+  useEffect(() => {
+    if (catalogAccessConfirmed) {
+      void loadSchedules();
+    }
+  }, [catalogAccessConfirmed, loadSchedules]);
+
+  useEffect(() => {
+    if (catalogAccessConfirmed) {
+      void loadTasks();
+    }
+  }, [catalogAccessConfirmed, loadTasks]);
 
   useEffect(() => {
     if (useMock || !hasActiveTasks) {
@@ -424,6 +489,7 @@ export function DataConnectDiscoverScene({
           <Switch
             checked={value}
             onChange={(checked) => {
+              const catalogIdentity = catalogInteractionIdentityRef.current;
               void modal.confirm({
                 title: checked
                   ? t("dataConnect.discoverScheduleEnableConfirmTitle")
@@ -439,11 +505,14 @@ export function DataConnectDiscoverScene({
                 cancelText: t("common.cancel"),
                 okButtonProps: checked ? undefined : { danger: true },
                 onOk: async () => {
+                  if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
                   try {
                     await setDataConnectDiscoverScheduleEnabled(record.id, checked);
+                    if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
                     message.success(t("common.success"));
                     await Promise.all([loadSchedules(), loadTasks()]);
                   } catch (error) {
+                    if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
                     void message.error(extractRequestErrorMessage(error));
                     throw error;
                   }
@@ -493,6 +562,7 @@ export function DataConnectDiscoverScene({
             <AppButton
               loading={triggeringScheduleId === record.id}
               onClick={() => {
+                const catalogIdentity = catalogInteractionIdentityRef.current;
                 void modal.confirm({
                   title: t("dataConnect.discoverRunScheduleConfirmTitle"),
                   content: t("dataConnect.discoverRunScheduleConfirmDescription", {
@@ -501,14 +571,18 @@ export function DataConnectDiscoverScene({
                   okText: t("dataConnect.discoverRunSchedule"),
                   cancelText: t("common.cancel"),
                   onOk: async () => {
+                    if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
                     try {
                       setTriggeringScheduleId(record.id);
                       await runDiscover(record.catalogId, record.strategy);
                     } catch (error) {
+                      if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
                       void message.error(extractRequestErrorMessage(error));
                       throw error;
                     } finally {
-                      setTriggeringScheduleId(null);
+                      if (catalogInteractionIdentityRef.current === catalogIdentity) {
+                        setTriggeringScheduleId(null);
+                      }
                     }
                   },
                 });
@@ -522,6 +596,7 @@ export function DataConnectDiscoverScene({
             <AppButton
               danger
               onClick={() => {
+                const catalogIdentity = catalogInteractionIdentityRef.current;
                 void modal.confirm({
                   title: t("dataConnect.discoverDeleteConfirmTitle"),
                   content: t("dataConnect.discoverDeleteConfirmDescription", {
@@ -531,9 +606,15 @@ export function DataConnectDiscoverScene({
                   cancelText: t("common.cancel"),
                   okButtonProps: { danger: true },
                   onOk: async () => {
-                    await deleteDataConnectDiscoverSchedule(record.id);
-                    void message.success(t("common.success"));
-                    await Promise.all([loadSchedules(), loadTasks()]);
+                    if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
+                    try {
+                      await deleteDataConnectDiscoverSchedule(record.id);
+                      if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
+                      void message.success(t("common.success"));
+                      await Promise.all([loadSchedules(), loadTasks()]);
+                    } catch (error) {
+                      if (catalogInteractionIdentityRef.current === catalogIdentity) throw error;
+                    }
                   },
                 });
               }}
@@ -654,11 +735,28 @@ export function DataConnectDiscoverScene({
           items: menuItems, onClick: ({ key, domEvent }) => {
             domEvent.stopPropagation();
             if (key === "detail") setDetailTaskId(record.id);
-            if (key === "delete") void modal.confirm({
-              title: t("dataConnect.discoverTaskDeleteConfirmTitle"), content: t("dataConnect.discoverTaskDeleteConfirmDescription", { id: record.id }),
-              okText: t("common.delete"), cancelText: t("common.cancel"), okButtonProps: { danger: true },
-              onOk: async () => { await deleteDataConnectDiscoverTask(record.id); void message.success(t("common.success")); if (detailTaskId === record.id) setDetailTaskId(null); await loadTasks(); },
-            });
+            if (key === "delete") {
+              const catalogIdentity = catalogInteractionIdentityRef.current;
+              void modal.confirm({
+                title: t("dataConnect.discoverTaskDeleteConfirmTitle"),
+                content: t("dataConnect.discoverTaskDeleteConfirmDescription", { id: record.id }),
+                okText: t("common.delete"),
+                cancelText: t("common.cancel"),
+                okButtonProps: { danger: true },
+                onOk: async () => {
+                  if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
+                  try {
+                    await deleteDataConnectDiscoverTask(record.id);
+                    if (catalogInteractionIdentityRef.current !== catalogIdentity) return;
+                    void message.success(t("common.success"));
+                    if (detailTaskId === record.id) setDetailTaskId(null);
+                    await loadTasks();
+                  } catch (error) {
+                    if (catalogInteractionIdentityRef.current === catalogIdentity) throw error;
+                  }
+                },
+              });
+            }
           }
         }} trigger={["click"]}><AppButton aria-label={t("dataConnect.moreActions")} icon={<EllipsisOutlined />} type="link" /></Dropdown>;
       },
@@ -768,33 +866,6 @@ export function DataConnectDiscoverScene({
 
     void navigate("/data-connect");
   };
-
-  const catalogFilter = (
-    <div className={styles.filterField}>
-      <span className={styles.filterLabel}>{t("dataConnect.discoverCatalog")}</span>
-      <Select
-        className={styles.filterSelectWide}
-        disabled={catalogLocked}
-        loading={loadingCatalogs}
-        onChange={(value) => {
-          setSelectedCatalogId(value || undefined);
-          setSchedulePage(1);
-          setTaskPage(1);
-        }}
-        filterOption={false}
-        onSearch={setCatalogKeyword}
-        options={[
-          ...(catalogLocked ? [] : [{ label: t("dataConnect.categoryAll"), value: "" }]),
-          ...catalogs.map((item) => ({
-            label: item.name,
-            value: item.id,
-          })),
-        ]}
-        showSearch={!catalogLocked}
-        value={selectedCatalogId ?? ""}
-      />
-    </div>
-  );
 
   const schedulesPanel = (
     <div className={styles.tabPanel}>
@@ -923,11 +994,7 @@ export function DataConnectDiscoverScene({
           <div className={`${styles.toolbarActions} ${styles.taskActionsRight}`}>
             <PermissionGate permissions="catalog:task_manage">
               <AppButton
-                disabled={!selectedCatalogId}
                 onClick={() => {
-                  if (!selectedCatalogId) {
-                    return;
-                  }
                   setRunNowOpen(true);
                 }}
                 type="primary"
@@ -1027,54 +1094,63 @@ export function DataConnectDiscoverScene({
         <DataConnectPageHeader
           description={t("dataConnect.discoverDescription")}
           extra={
-            catalogLocked && selectedCatalogName ? (
+            selectedCatalogName ? (
               <div className={styles.contextBar}>
                 <span className={styles.contextLabel}>
                   {t("dataConnect.discoverCurrentConnection")}
                 </span>
                 <strong className={styles.contextName}>{selectedCatalogName}</strong>
               </div>
-            ) : catalogLocked ? null : (
-              catalogFilter
-            )
+            ) : null
           }
           layout="inline"
           onBack={handleBackToConnections}
           title={t("dataConnect.discoverTitle")}
           variant="plain"
         />
-        {catalogError ? <Alert message={catalogError} showIcon type="warning" /> : null}
-        <Tabs
-          activeKey={activeTab}
-          className={styles.pageTabs}
-          items={[
-            {
-              key: "tasks",
-              label:
-                activeTaskCount > 0
-                  ? `${t("dataConnect.discoverTabTasks")} (${activeTaskCount})`
-                  : t("dataConnect.discoverTabTasks"),
-              children: tasksPanel,
-            },
-            {
-              key: "schedules",
-              label: t("dataConnect.discoverTabSchedules"),
-              children: schedulesPanel,
-            },
-          ]}
-          onChange={(key) => {
-            changeActiveTab(key as DataConnectDiscoverTab);
-          }}
-        />
+        {catalogError ? (
+          <Alert
+            action={(
+              <AppButton onClick={() => void loadCatalogs()} type="link">
+                {t("common.retry")}
+              </AppButton>
+            )}
+            message={catalogError}
+            showIcon
+            type="warning"
+          />
+        ) : null}
+        {catalogAccessDenied ? (
+          <Alert message={t("common.noPermission")} showIcon type="error" />
+        ) : catalogError ? null : (
+          <Tabs
+            activeKey={activeTab}
+            className={styles.pageTabs}
+            items={[
+              {
+                key: "tasks",
+                label:
+                  activeTaskCount > 0
+                    ? `${t("dataConnect.discoverTabTasks")} (${activeTaskCount})`
+                    : t("dataConnect.discoverTabTasks"),
+                children: tasksPanel,
+              },
+              {
+                key: "schedules",
+                label: t("dataConnect.discoverTabSchedules"),
+                children: schedulesPanel,
+              },
+            ]}
+            onChange={(key) => {
+              changeActiveTab(key as DataConnectDiscoverTab);
+            }}
+          />
+        )}
       </section>
-      {scheduleModalState ? (
+      {scheduleModalState && catalogAccessConfirmed ? (
         <DiscoverScheduleFormModal
           catalogs={catalogs}
-          defaultCatalogId={
-            scheduleModalState.mode === "create" && catalogLocked
-              ? selectedCatalogId
-              : undefined
-          }
+          defaultCatalogId={scheduleModalState.mode === "create" ? selectedCatalogId : undefined}
           initialValue={scheduleModalState.mode === "edit" ? editingSchedule : null}
           mode={scheduleModalState.mode}
           onCancel={() => {
@@ -1082,13 +1158,12 @@ export function DataConnectDiscoverScene({
             setScheduleModalState(null);
             setEditingSchedule(null);
           }}
-          onCatalogSearch={setCatalogKeyword}
           onSubmit={handleScheduleSubmit}
           open
           submitting={scheduleModalSubmitting}
         />
       ) : null}
-      {selectedCatalogId ? (
+      {catalogAccessConfirmed ? (
         <DiscoverRunNowModal
           connectionName={
             catalogNameMap.get(selectedCatalogId) ?? selectedCatalogId
@@ -1097,14 +1172,25 @@ export function DataConnectDiscoverScene({
             setRunNowOpen(false);
           }}
           onSubmit={async (strategy) => {
+            const catalogIdentity = catalogInteractionIdentityRef.current;
             try {
               setRunNowSubmitting(true);
-              await runDiscover(selectedCatalogId, strategy);
+              const result = await runDiscover(selectedCatalogId, strategy);
+              if (
+                !result ||
+                catalogInteractionIdentityRef.current !== catalogIdentity
+              ) {
+                return;
+              }
               setRunNowOpen(false);
             } catch (error) {
-              void message.error(extractRequestErrorMessage(error));
+              if (catalogInteractionIdentityRef.current === catalogIdentity) {
+                void message.error(extractRequestErrorMessage(error));
+              }
             } finally {
-              setRunNowSubmitting(false);
+              if (catalogInteractionIdentityRef.current === catalogIdentity) {
+                setRunNowSubmitting(false);
+              }
             }
           }}
           open={runNowOpen}

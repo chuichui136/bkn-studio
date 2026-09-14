@@ -115,6 +115,7 @@ const staleResource: CatalogResource = {
   description: "",
   id: "resource-1",
   name: "orders",
+  operations: ["modify", "query_data", "view_detail"],
   rowCount: 1,
   schema: [{ name: "order_id", type: "string" }],
   sourceIdentifier: "orders",
@@ -130,7 +131,7 @@ describe("ResourceWorkspaceScene", () => {
     getCatalogMock.mockResolvedValue({
       id: "catalog-1",
       name: "Catalog",
-      operations: ["authorize", "resource_manage", "task_manage"],
+      operations: ["authorize", "resource_manage", "task_manage", "view_detail"],
     });
     listBuildTaskPageMock.mockResolvedValue({ items: [], total: 0 });
     subscribeMockDbMock.mockImplementation(() => () => {});
@@ -187,11 +188,40 @@ describe("ResourceWorkspaceScene", () => {
     );
 
     await waitFor(() => expect(screen.getByTestId("detail-schema-name")).toBeTruthy());
+    expect(screen.queryByText("Forbidden")).toBeNull();
     expect(getCatalogMock).toHaveBeenCalledWith(staleResource.catalogId, { skipErrorToast: true });
+    expect(listBuildTaskPageMock).not.toHaveBeenCalled();
+  });
+
+  it("does not load build tasks without task_manage on the parent catalog", async () => {
+    getCatalogResourceMock.mockResolvedValue(staleResource);
+    getCatalogMock.mockResolvedValue({
+      id: "catalog-1",
+      internal: false,
+      name: "Catalog",
+      operations: ["view_detail"],
+    });
+
+    render(
+      <ResourceWorkspaceScene
+        indexView="config"
+        onIndexViewChange={vi.fn()}
+        onTabChange={vi.fn()}
+        resourceId={staleResource.id}
+        tab="detail"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("detail-schema-name")).toBeTruthy());
+    expect(listBuildTaskPageMock).not.toHaveBeenCalled();
   });
 
   it("does not use global catalog grants for management actions on the current catalog", async () => {
-    currentPermissions.value = ["catalog:resource_manage", "catalog:task_manage"];
+    currentPermissions.value = [
+      "catalog:resource_manage",
+      "catalog:task_manage",
+      "catalog:view_detail",
+    ];
     getCatalogResourceMock.mockResolvedValue(staleResource);
     getCatalogMock.mockResolvedValue({
       id: "catalog-1",

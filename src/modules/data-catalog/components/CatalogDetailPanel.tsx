@@ -29,6 +29,7 @@ import { resourceQueryBlockReason } from "@/modules/data-catalog/lib/resource-qu
 import { isCatalogPhysical } from "@/modules/data-catalog/lib/index-state";
 import { listCatalogResourcePage } from "@/modules/data-catalog/services/resource.service";
 import type { CatalogResource, ResourceDiscoverStatus } from "@/modules/data-catalog/types/data-catalog";
+import { hasCatalogResourceOperation } from "@/modules/data-catalog/utils/resource-operations";
 import { hasCatalogOperation, type CatalogRecord } from "@/shared/catalog";
 
 import styles from "./CatalogDetailPanel.module.css";
@@ -389,7 +390,7 @@ export function CatalogDetailPanel({
             label: t("common.detail"),
           },
           {
-            disabled: previewDisabled,
+            disabled: previewDisabled || !hasCatalogResourceOperation(record, "query_data"),
             key: "preview",
             label: queryBlockReason ? (
               <Tooltip
@@ -433,7 +434,7 @@ export function CatalogDetailPanel({
             ),
           });
         }
-        if (canAuthorizeGrants && !catalog.internal) {
+        if (!catalog.internal && canAuthorizeGrants) {
           // 读这张表的数据是表一级的授权,和目录一级的管理动词分开(bkn-foundry#986)。
           moreItems.push({
             key: "authorize",
@@ -448,7 +449,7 @@ export function CatalogDetailPanel({
             ),
           });
         }
-        if (!catalog.internal) {
+        if (!catalog.internal && canManageResourceTasks) {
           moreItems.push({
             key: "semantic-understanding",
             label: t("dataCatalog.resourceWorkspace.tabSemanticUnderstanding"),
@@ -574,10 +575,10 @@ export function CatalogDetailPanel({
         ) : resourceTotal === 0 && !hasResourceQuery ? (
           <EmptyStatePanel
             action={
-              physical ? (
+              physical && canManageResourceTasks ? (
                 <AppButton
                   onClick={() => {
-                    void navigate(`/data-connect/discover?catalogId=${catalog.id}`);
+                    void navigate(`/data-connect/${catalog.id}/discover`);
                   }}
                   type="primary"
                 >

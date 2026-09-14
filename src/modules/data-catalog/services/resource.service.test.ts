@@ -280,7 +280,7 @@ describe("resource.service · listCatalogResourcePage", () => {
     expect(result.items[0]?.updateTime).not.toBe("");
   });
 
-  it("preserves unknown operations for backend authorization fallback", async () => {
+  it("preserves missing operations for fail-closed authorization checks", async () => {
     getMock.mockResolvedValue({
       data: {
         entries: [{ catalog_id: "cat-1", id: "res-1", name: "orders", update_time: 123 }],
@@ -579,6 +579,19 @@ describe("resource.service · mock update boundaries", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it("exposes canonical Vega operations on mock resources", async () => {
+    const { getCatalogResource } = await import(
+      "@/modules/data-catalog/services/resource.service"
+    );
+
+    const resource = await getCatalogResource("res-orders");
+
+    expect(resource?.operations).toEqual([
+      "view_detail",
+      "query_data",
+    ]);
   });
 
   it("returns an HTTP-shaped 404 for a missing resource", async () => {

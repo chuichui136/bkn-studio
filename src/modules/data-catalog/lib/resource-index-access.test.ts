@@ -15,9 +15,12 @@ import {
 import type { CatalogResource } from "@/modules/data-catalog/types/data-catalog";
 import type { CatalogRecord } from "@/shared/catalog";
 
-const catalog = (internal: boolean) => ({
+const catalog = (
+  internal: boolean,
+  operations = internal ? [] : ["task_manage", "view_detail"],
+) => ({
   internal,
-  operations: internal ? [] : ["task_manage"],
+  operations,
 }) as CatalogRecord;
 const resource = (category: CatalogResource["category"]) => ({ category }) as CatalogResource;
 
@@ -46,6 +49,7 @@ describe("resource index access", () => {
   it("allows future non-dataset resource categories to manage build tasks", () => {
     expect(canManageResourceBuildTasks(resource("logicview"), catalog(false))).toBe(true);
     expect(canManageResourceBuildTasks(resource("table"), catalog(true))).toBe(false);
-    expect(canViewResourceIndexTasks(resource("logicview"))).toBe(true);
+    expect(canViewResourceIndexTasks(resource("logicview"), catalog(false))).toBe(true);
+    expect(canViewResourceIndexTasks(resource("logicview"), catalog(false, []))).toBe(false);
   });
 });

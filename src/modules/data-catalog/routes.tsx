@@ -5,10 +5,8 @@
  * Conditions. See LICENSE for the full text.
  */
 
-/* eslint-disable react-refresh/only-export-components */
-
 import { lazy, Suspense, type ReactNode } from "react";
-import { Navigate, useLocation, useParams, type RouteObject } from "react-router-dom";
+import type { RouteObject } from "react-router-dom";
 
 import type { AppRouteContribution } from "@/app/router/types";
 import { RequirePermission } from "@/framework/permission/RequirePermission";
@@ -43,42 +41,13 @@ function withRouteLoading(permissions: string | string[], element: ReactNode) {
   );
 }
 
-function withPublicRouteLoading(element: ReactNode) {
-  return <Suspense fallback={<RouteLoading />}>{element}</Suspense>;
-}
-
-function LegacyDataCatalogRootRedirect() {
-  return <Navigate replace to="/data-catalog" />;
-}
-
-function LegacyDataCatalogCatalogRedirect() {
-  const { catalogId } = useParams();
-  return <Navigate replace to={`/data-catalog/catalog/${catalogId ?? ""}`} />;
-}
-
-function LegacyDataCatalogResourceRedirect() {
-  const { resourceId } = useParams();
-  const location = useLocation();
-  return (
-    <Navigate
-      replace
-      to={`/data-catalog/resource/${resourceId ?? ""}${location.search}`}
-    />
-  );
-}
-
-function LegacyTaskManagementRedirect() {
-  const location = useLocation();
-  return <Navigate replace to={`/task-management${location.search}`} />;
-}
-
 export const dataCatalogRoutes: RouteObject[] = [
   {
     path: "data-catalog",
     handle: {
       console: dataCatalogConsole,
     },
-    element: withPublicRouteLoading(<DataCatalogPage />),
+    element: withRouteLoading(["catalog:view_detail", "resource:view_detail"], <DataCatalogPage />),
     children: [
       {
         element: <></>,
@@ -110,18 +79,6 @@ export const dataCatalogRoutes: RouteObject[] = [
     element: withRouteLoading(["catalog:view_detail", "resource:view_detail"], <ResourceWorkspacePage />),
   },
   {
-    path: "data-directory",
-    element: <LegacyDataCatalogRootRedirect />,
-  },
-  {
-    path: "data-directory/catalog/:catalogId",
-    element: <LegacyDataCatalogCatalogRedirect />,
-  },
-  {
-    path: "data-directory/resource/:resourceId",
-    element: <LegacyDataCatalogResourceRedirect />,
-  },
-  {
     path: "task-management",
     handle: {
       console: {
@@ -130,11 +87,7 @@ export const dataCatalogRoutes: RouteObject[] = [
         titleKey: "dataCatalog.indexBuildTitle",
       },
     },
-    element: withPublicRouteLoading(<TaskManagementPage />),
-  },
-  {
-    path: "index-builds",
-    element: <LegacyTaskManagementRedirect />,
+    element: withRouteLoading("catalog:task_manage", <TaskManagementPage />),
   },
 ];
 

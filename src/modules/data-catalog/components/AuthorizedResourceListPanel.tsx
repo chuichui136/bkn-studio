@@ -24,8 +24,7 @@ type AuthorizedResourceListPanelProps = {
 };
 
 // This view intentionally has no Catalog model. The server has established
-// which child resources are visible; no parent name, type, state, or
-// configuration is invented on the client.
+// which child resources are visible; no parent metadata or permissions are inferred.
 export function AuthorizedResourceListPanel({
   catalogId,
   onOpenResource,
@@ -66,7 +65,9 @@ export function AuthorizedResourceListPanel({
     {
       dataIndex: "category",
       title: t("dataCatalog.resource.category"),
-      render: (category: CatalogResource["category"]) => t(`dataCatalog.categories.${category}`),
+      render: (category: CatalogResource["category"]) => (
+        t(`dataCatalog.categories.${category}`)
+      ),
     },
   ];
 
@@ -74,14 +75,20 @@ export function AuthorizedResourceListPanel({
     <TableSurface>
       {loading ? <Spin /> : error ? (
         <Alert
-          action={<AppButton onClick={() => setReloadKey((value) => value + 1)} type="link">{t("common.retry")}</AppButton>}
+          action={(
+            <AppButton onClick={() => setReloadKey((value) => value + 1)} type="link">
+              {t("common.retry")}
+            </AppButton>
+          )}
           message={error}
           showIcon
           type="error"
         />
       ) : items.length === 0 ? (
         <EmptyStatePanel description="" title={t("dataCatalog.resource.noMatch")} />
-      ) : <AppTable columns={columns} dataSource={items} pagination={false} rowKey="id" />}
+      ) : (
+        <AppTable columns={columns} dataSource={items} pagination={false} rowKey="id" />
+      )}
     </TableSurface>
   );
 }

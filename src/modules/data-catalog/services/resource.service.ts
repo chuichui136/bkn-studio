@@ -430,35 +430,6 @@ export async function listCatalogResourcePage(
   };
 }
 
-export async function listCatalogResources(
-  query: ResourceListQuery = {},
-): Promise<CatalogResource[]> {
-  if (query.limit !== undefined || query.offset !== undefined) {
-    return (await listCatalogResourcePage(query)).items;
-  }
-
-  const resources: CatalogResource[] = [];
-  let offset = 0;
-  let total = Number.POSITIVE_INFINITY;
-
-  while (resources.length < total) {
-    const page = await listCatalogResourcePage({
-      ...query,
-      limit: RESOURCE_LIST_PAGE_SIZE,
-      offset,
-    });
-    resources.push(...page.items);
-    total = page.total;
-
-    if (page.items.length === 0 || page.items.length < RESOURCE_LIST_PAGE_SIZE) {
-      break;
-    }
-    offset += page.items.length;
-  }
-
-  return resources;
-}
-
 export async function countCatalogResources(
   query: ResourceListQuery = {},
 ): Promise<number> {
@@ -508,7 +479,7 @@ export async function createCatalogResource(input: ResourceCreateInput) {
       description: input.description,
       enabled: true,
       localIndexStatus: "unavailable",
-      operations: ["view_detail", "query_data", "modify"],
+      operations: ["view_detail", "query_data"],
       schema:
         input.schema.length > 0
           ? input.schema

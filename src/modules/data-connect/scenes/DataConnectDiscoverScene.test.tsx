@@ -5,7 +5,8 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { AxiosError, AxiosHeaders } from "axios";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,19 +16,27 @@ import { DataConnectDiscoverScene } from "./DataConnectDiscoverScene";
 
 const {
   appServicesMock,
+  deleteTaskMock,
+  getCatalogMock,
   getScheduleMock,
   listTasksMock,
   listSchedulesMock,
+  triggerDiscoverMock,
   updateScheduleMock,
 } = vi.hoisted(() => ({
   appServicesMock: {
     message: { error: vi.fn(), success: vi.fn() },
     modal: { confirm: vi.fn() },
-    runtimeConfig: { currentUser: { permissions: ["catalog:task_manage"] } },
+    runtimeConfig: {
+      currentUser: { permissions: ["catalog:task_manage", "catalog:view_detail"] },
+    },
   },
+  deleteTaskMock: vi.fn(),
+  getCatalogMock: vi.fn(),
   getScheduleMock: vi.fn(),
   listTasksMock: vi.fn(),
   listSchedulesMock: vi.fn(),
+  triggerDiscoverMock: vi.fn(),
   updateScheduleMock: vi.fn(),
 }));
 
@@ -42,11 +51,17 @@ vi.mock("react-router-dom", async (importOriginal) => ({
 }));
 
 vi.mock("antd", () => ({
-  Alert: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Alert: ({ action, children, message }: { action?: ReactNode; children?: ReactNode; message?: ReactNode }) => (
+    <div>{message}{children}{action}</div>
+  ),
   Input: ({ onChange, value }: { onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void; value?: string }) => (
     <input onChange={onChange} value={value} />
   ),
-  Select: () => null,
+  Select: ({ options = [] }: { options?: Array<{ label: ReactNode; value: string }> }) => (
+    <div data-testid="catalog-options">
+      {options.map((option) => <span key={option.value}>{option.label}</span>)}
+    </div>
+  ),
   Space: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Switch: () => null,
   Tabs: ({
@@ -142,7 +157,7 @@ vi.mock("@/framework/ui/common/TableSurface", () => ({
 }));
 
 vi.mock("@/modules/data-connect/components/DataConnectPageHeader", () => ({
-  DataConnectPageHeader: () => null,
+  DataConnectPageHeader: ({ extra }: { extra?: ReactNode }) => <>{extra}</>,
 }));
 
 vi.mock("@/modules/data-connect/components/DataConnectDiscoverTaskDrawer", () => ({
@@ -150,7 +165,17 @@ vi.mock("@/modules/data-connect/components/DataConnectDiscoverTaskDrawer", () =>
 }));
 
 vi.mock("@/modules/data-connect/components/DiscoverRunNowModal", () => ({
-  DiscoverRunNowModal: () => null,
+  DiscoverRunNowModal: ({ onSubmit, open, submitting }: {
+    onSubmit: (strategy: "full_sync") => Promise<void>;
+    open: boolean;
+    submitting: boolean;
+  }) => open ? (
+    <>
+      <output>run now modal</output>
+      <output data-testid="run-now-submitting">{String(submitting)}</output>
+      <button onClick={() => void onSubmit("full_sync")} type="button">submit run now</button>
+    </>
+  ) : null,
 }));
 
 vi.mock("@/modules/data-connect/components/DiscoverScheduleFormModal", () => ({
@@ -190,18 +215,22 @@ vi.mock("@/modules/data-connect/components/DiscoverScheduleFormModal", () => ({
 }));
 
 vi.mock("@/shared/catalog", () => ({
-  listCatalogs: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  getCatalog: getCatalogMock,
+  hasCatalogOperation: (
+    catalog: { operations?: string[] } | null | undefined,
+    operation: string,
+  ) => Boolean(catalog?.operations?.includes("*") || catalog?.operations?.includes(operation)),
 }));
 
 vi.mock("@/modules/data-connect/services/discover.service", () => ({
   createDataConnectDiscoverSchedule: vi.fn(),
   deleteDataConnectDiscoverSchedule: vi.fn(),
-  deleteDataConnectDiscoverTask: vi.fn(),
+  deleteDataConnectDiscoverTask: deleteTaskMock,
   getDataConnectDiscoverSchedule: getScheduleMock,
   listDataConnectDiscoverSchedules: listSchedulesMock,
   listDataConnectDiscoverTasks: listTasksMock,
   setDataConnectDiscoverScheduleEnabled: vi.fn(),
-  triggerDataConnectDiscover: vi.fn(),
+  triggerDataConnectDiscover: triggerDiscoverMock,
   updateDataConnectDiscoverSchedule: updateScheduleMock,
 }));
 
@@ -225,16 +254,47 @@ const schedule = (expectedUpdateTime: number) => ({
   updaterName: "-",
 });
 
-async function openScheduleEditor() {
+const task = (catalogId: string, id: string) => ({
+  catalogId,
+  createTime: 100,
+  id,
+  progress: 100,
+  queuePriority: 10,
+  status: "completed" as const,
+  strategy: "full_sync" as const,
+  triggerType: "manual" as const,
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+async function openScheduleEditor(expectedRequestCount = 1) {
   await waitFor(() => expect(listSchedulesMock).toHaveBeenCalled());
   fireEvent.click(screen.getByRole("button", { name: "dataConnect.discoverTabSchedules" }));
   fireEvent.click(screen.getByRole("button", { name: "common.edit" }));
-  await waitFor(() => expect(getScheduleMock).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(getScheduleMock).toHaveBeenCalledTimes(expectedRequestCount));
 }
 
 describe("DataConnectDiscoverScene", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getScheduleMock.mockReset();
+    getCatalogMock.mockResolvedValue({
+      id: "catalog-1",
+      name: "Orders",
+      operations: ["task_manage", "view_detail"],
+    });
+    updateScheduleMock.mockReset();
+    deleteTaskMock.mockReset();
+    triggerDiscoverMock.mockReset();
+    triggerDiscoverMock.mockResolvedValue({ id: "discover-task-new" });
     listSchedulesMock.mockResolvedValue({ items: [schedule(100)], total: 1 });
     listTasksMock.mockResolvedValue({ items: [], total: 0 });
     getScheduleMock
@@ -244,6 +304,102 @@ describe("DataConnectDiscoverScene", () => {
       isAxiosError: true,
       response: { status: 409 },
     });
+  });
+
+  it("rejects a direct catalog route without task_manage on that catalog", async () => {
+    getCatalogMock.mockResolvedValue({
+      id: "catalog-1",
+      name: "Orders",
+      operations: ["view_detail"],
+    });
+
+    render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    expect(await screen.findByText("common.noPermission")).toBeTruthy();
+    expect(listTasksMock).not.toHaveBeenCalled();
+    expect(listSchedulesMock).not.toHaveBeenCalled();
+  });
+
+  it("authorizes a direct catalog route with an exact catalog lookup", async () => {
+    render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    await waitFor(() => expect(listTasksMock).toHaveBeenCalled());
+    expect(getCatalogMock).toHaveBeenCalledWith("catalog-1", { skipErrorToast: true });
+  });
+
+  it("keeps the newest direct catalog authorization when lookups resolve out of order", async () => {
+    const firstLookup = deferred<{ id: string; name: string; operations: string[] }>();
+    const secondLookup = deferred<{ id: string; name: string; operations: string[] }>();
+    getCatalogMock.mockImplementation((id: string) =>
+      id === "catalog-1" ? firstLookup.promise : secondLookup.promise,
+    );
+    const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+    await waitFor(() => expect(getCatalogMock).toHaveBeenCalledWith(
+      "catalog-1",
+      { skipErrorToast: true },
+    ));
+
+    view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
+    await waitFor(() => expect(getCatalogMock).toHaveBeenCalledWith(
+      "catalog-2",
+      { skipErrorToast: true },
+    ));
+    await act(async () => {
+      secondLookup.resolve({
+        id: "catalog-2",
+        name: "Customers",
+        operations: ["task_manage", "view_detail"],
+      });
+      await secondLookup.promise;
+    });
+    await waitFor(() => expect(listTasksMock).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: "catalog-2" }),
+    ));
+
+    await act(async () => {
+      firstLookup.resolve({
+        id: "catalog-1",
+        name: "Orders",
+        operations: ["view_detail"],
+      });
+      await firstLookup.promise;
+    });
+
+    expect(screen.queryByText("common.noPermission")).toBeNull();
+  });
+
+  it("shows no permission only for a forbidden direct catalog lookup", async () => {
+    getCatalogMock.mockRejectedValue(new AxiosError(
+      "Forbidden",
+      undefined,
+      undefined,
+      undefined,
+      {
+        status: 403,
+        statusText: "Forbidden",
+        headers: new AxiosHeaders(),
+        config: { headers: new AxiosHeaders() },
+        data: {},
+      },
+    ));
+
+    render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    expect(await screen.findByText("common.noPermission")).toBeTruthy();
+    expect(listTasksMock).not.toHaveBeenCalled();
+    expect(listSchedulesMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps lookup failures distinct from permission denials", async () => {
+    getCatalogMock.mockRejectedValue(new Error("Catalog lookup failed"));
+
+    render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    expect(await screen.findByText("Catalog lookup failed")).toBeTruthy();
+    expect(screen.queryByText("common.noPermission")).toBeNull();
+    expect(screen.getByRole("button", { name: "common.retry" })).toBeTruthy();
+    expect(listTasksMock).not.toHaveBeenCalled();
+    expect(listSchedulesMock).not.toHaveBeenCalled();
   });
 
   it("refreshes the discover schedule version after an update conflict", async () => {
@@ -369,5 +525,164 @@ describe("DataConnectDiscoverScene", () => {
       expect(screen.getByTestId("selected-task-keys").textContent).toBe("");
       expect(screen.queryByText("drawer:discover-task-1")).toBeNull();
     });
+  });
+
+  it("closes the active schedule editor when the catalog changes", async () => {
+    const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    await openScheduleEditor();
+    expect(await screen.findByRole("button", { name: "submit schedule 100" })).toBeTruthy();
+
+    view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "submit schedule 100" })).toBeNull();
+    });
+  });
+
+  it("resets schedule submission state when the catalog changes", async () => {
+    const update = deferred<void>();
+    updateScheduleMock.mockReturnValueOnce(update.promise);
+    const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    await openScheduleEditor();
+    fireEvent.click(screen.getByRole("button", { name: "submit schedule 100" }));
+    await waitFor(() => expect(screen.getByTestId("schedule-submitting").textContent).toBe("true"));
+
+    view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
+    await waitFor(() => expect(screen.queryByTestId("schedule-submitting")).toBeNull());
+    await openScheduleEditor(2);
+
+    expect(screen.getByTestId("schedule-submitting").textContent).toBe("false");
+
+    await act(async () => {
+      update.resolve();
+      await update.promise;
+    });
+  });
+
+  it("does not trigger a schedule confirmed after the catalog changes", async () => {
+    const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    await waitFor(() => expect(listSchedulesMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "dataConnect.discoverTabSchedules" }));
+    fireEvent.click(screen.getByRole("button", { name: "dataConnect.discoverRunSchedule" }));
+    const confirmation = appServicesMock.modal.confirm.mock.calls.at(-1)?.[0] as
+      | { onOk?: () => Promise<void> }
+      | undefined;
+    expect(confirmation?.onOk).toBeTypeOf("function");
+
+    view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
+    await waitFor(() => expect(getCatalogMock).toHaveBeenCalledWith(
+      "catalog-2",
+      { skipErrorToast: true },
+    ));
+    await act(async () => {
+      await confirmation?.onOk?.();
+    });
+
+    expect(triggerDiscoverMock).not.toHaveBeenCalled();
+  });
+
+  it("closes the run-now modal when the catalog changes", async () => {
+    const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    await waitFor(() => expect(listTasksMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "dataConnect.discoverRunNow" }));
+    expect(screen.getByText("run now modal")).toBeTruthy();
+
+    view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
+
+    await waitFor(() => {
+      expect(screen.queryByText("run now modal")).toBeNull();
+    });
+  });
+
+  it("ignores a run-now result after the catalog changes", async () => {
+    const run = deferred<{ id: string }>();
+    triggerDiscoverMock.mockReturnValueOnce(run.promise);
+    const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    await waitFor(() => expect(listTasksMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "dataConnect.discoverRunNow" }));
+    fireEvent.click(screen.getByRole("button", { name: "submit run now" }));
+    await waitFor(() => expect(screen.getByTestId("run-now-submitting").textContent).toBe("true"));
+
+    view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
+    await waitFor(() => expect(screen.queryByText("run now modal")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "dataConnect.discoverRunNow" }));
+    expect(screen.getByTestId("run-now-submitting").textContent).toBe("false");
+
+    await act(async () => {
+      run.resolve({ id: "discover-task-stale" });
+      await run.promise;
+    });
+
+    expect(screen.getByText("run now modal")).toBeTruthy();
+    expect(screen.queryByText("drawer:discover-task-stale")).toBeNull();
+  });
+
+  it("does not refresh the previous catalog after a pending mutation completes", async () => {
+    const deletion = deferred<void>();
+    deleteTaskMock.mockReturnValueOnce(deletion.promise);
+    listTasksMock.mockImplementation(({ catalogId }: { catalogId?: string }) => Promise.resolve({
+      items: [task(catalogId ?? "", catalogId === "catalog-1" ? "task-old" : "task-new")],
+      total: 1,
+    }));
+    const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    await screen.findByText("task-old");
+    fireEvent.click(screen.getByRole("button", { name: "select first task" }));
+    fireEvent.click(screen.getByRole("button", { name: "dataCatalog.task.batchDelete (1)" }));
+    const confirmation = appServicesMock.modal.confirm.mock.calls.at(-1)?.[0] as
+      | { onOk?: () => Promise<void> }
+      | undefined;
+    expect(confirmation?.onOk).toBeTypeOf("function");
+    const deletionResult = confirmation?.onOk?.();
+    await waitFor(() => expect(deleteTaskMock).toHaveBeenCalledWith("task-old"));
+
+    view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
+    expect(await screen.findByText("task-new")).toBeTruthy();
+
+    await act(async () => {
+      deletion.resolve();
+      await deletionResult;
+    });
+
+    expect(screen.queryByText("task-old")).toBeNull();
+    expect(screen.getByText("task-new")).toBeTruthy();
+    expect(listTasksMock.mock.calls.filter(([query]) => (
+      (query as { catalogId?: string }).catalogId === "catalog-1"
+    ))).toHaveLength(1);
+  });
+
+  it("does not replace the new catalog task list with a stale response", async () => {
+    const firstTasks = deferred<{ items: ReturnType<typeof task>[]; total: number }>();
+    const secondTasks = deferred<{ items: ReturnType<typeof task>[]; total: number }>();
+    listTasksMock.mockImplementation(({ catalogId }: { catalogId?: string }) =>
+      catalogId === "catalog-1" ? firstTasks.promise : secondTasks.promise,
+    );
+    const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+    await waitFor(() => expect(listTasksMock).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: "catalog-1" }),
+    ));
+
+    view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
+    await waitFor(() => expect(listTasksMock).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: "catalog-2" }),
+    ));
+    await act(async () => {
+      secondTasks.resolve({ items: [task("catalog-2", "task-new")], total: 1 });
+      await secondTasks.promise;
+    });
+    expect(await screen.findByText("task-new")).toBeTruthy();
+
+    await act(async () => {
+      firstTasks.resolve({ items: [task("catalog-1", "task-stale")], total: 1 });
+      await firstTasks.promise;
+    });
+
+    expect(screen.queryByText("task-stale")).toBeNull();
+    expect(screen.getByText("task-new")).toBeTruthy();
   });
 });

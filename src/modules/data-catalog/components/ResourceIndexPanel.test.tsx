@@ -99,9 +99,13 @@ vi.mock("@/modules/data-catalog/components/BuildTaskLaunchPanel", () => ({
   ),
 }));
 vi.mock("@/modules/data-catalog/components/IndexConfigFormPanel", () => ({
-  IndexConfigFormPanel: (props: unknown) => {
+  IndexConfigFormPanel: (props: { readOnly: boolean }) => {
     indexConfigFormPanelMock(props);
-    return null;
+    return (
+      <output data-testid="index-config-read-only">
+        {String(props.readOnly)}
+      </output>
+    );
   },
 }));
 vi.mock("@/modules/data-catalog/hooks/use-build-task-actions", () => ({
@@ -119,6 +123,7 @@ const resource: CatalogResource = {
   id: "resource-1",
   localIndexStatus: "unavailable",
   name: "orders",
+  operations: ["modify", "query_data", "view_detail"],
   rowCount: 1,
   schema: [{ name: "id", type: "string" }],
   sourceIdentifier: "orders",
@@ -127,7 +132,12 @@ const resource: CatalogResource = {
 
 const manageableCatalog = {
   internal: false,
-  operations: ["task_manage"],
+  operations: ["task_manage", "view_detail"],
+} as CatalogRecord;
+
+const modifiableCatalog = {
+  internal: false,
+  operations: ["resource_manage", "task_manage", "view_detail"],
 } as CatalogRecord;
 
 function buildTask(overrides: Partial<BuildTask>): BuildTask {
@@ -183,12 +193,12 @@ describe("ResourceIndexPanel", () => {
     }));
   });
 
-  it("keeps index configuration editable with catalog resource management", () => {
+  it("keeps index configuration editable with catalog resource management permission", () => {
     render(
       <MemoryRouter>
         <ResourceIndexPanel
           active
-          catalog={{ ...manageableCatalog, operations: ["resource_manage"] }}
+          catalog={modifiableCatalog}
           indexView="config"
           indexViewExplicit
           onIndexViewChange={vi.fn()}
@@ -408,4 +418,5 @@ describe("ResourceIndexPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
     await waitFor(() => expect(listBuildTaskPageMock.mock.calls.length).toBeGreaterThan(callsBeforeRetry));
   });
+
 });

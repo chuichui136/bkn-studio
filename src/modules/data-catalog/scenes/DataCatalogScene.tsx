@@ -143,6 +143,10 @@ export function DataCatalogScene({
   const [discover, setDiscovers] = useState<CatalogDiscoverRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedCatalogError, setSelectedCatalogError] = useState<{
+    catalogId: string;
+    message: string;
+  } | null>(null);
 
   const [resourceDrawer, setResourceDrawer] = useState<{
     catalogId?: string;
@@ -331,6 +335,8 @@ export function DataCatalogScene({
     }
     if (catalogs.some((catalog) => catalog.id === selection.id)) {
       setSelectedCatalogLoadingId(null);
+      setSelectedCatalogError(null);
+      setRestrictedCatalogId(null);
       return;
     }
     if (selectedCatalogRequestIds.current.has(selection.id)) {
@@ -338,8 +344,9 @@ export function DataCatalogScene({
     }
     selectedCatalogRequestIds.current.add(selection.id);
     setSelectedCatalogLoadingId(selection.id);
-    const generation = catalogQueryGeneration.current;
+    setSelectedCatalogError(null);
     setRestrictedCatalogId(null);
+    const generation = catalogQueryGeneration.current;
     void getCatalog(selection.id, { skipErrorToast: true })
       .then((catalog) => {
         if (
@@ -349,6 +356,8 @@ export function DataCatalogScene({
         ) {
           return;
         }
+        setSelectedCatalogError(null);
+        setRestrictedCatalogId(null);
         if (paginatedCatalogScopes.current.has(catalog.id)) {
           return;
         }
@@ -363,11 +372,6 @@ export function DataCatalogScene({
       })
       .catch(async (error) => {
         if (isRequestForbidden(error)) {
-          // A Resource can be directly granted without catalog:view_detail. In
-          // that case the public Catalog detail call is correctly forbidden, but
-          // the Resource list still applies the child-level PEP. Use that list
-          // solely to establish whether this route has authorized children; do
-          // not turn the 403 into access to the parent Catalog itself.
           try {
             const resources = await listCatalogResourcePage({
               catalogId: selection.id,
@@ -379,19 +383,22 @@ export function DataCatalogScene({
               && generation === catalogQueryGeneration.current
               && selectedCatalogIdRef.current === selection.id
             ) {
+              setSelectedCatalogError(null);
               setRestrictedCatalogId(selection.id);
               return;
             }
           } catch {
-            // Keep the original Catalog error below. A failed child lookup must
-            // never make a parent route appear accessible.
+            // Preserve the parent Catalog error when the child-level PEP cannot confirm access.
           }
         }
         if (
           generation === catalogQueryGeneration.current &&
           selectedCatalogIdRef.current === selection.id
         ) {
-          setLoadError(extractRequestErrorMessage(error));
+          setSelectedCatalogError({
+            catalogId: selection.id,
+            message: extractRequestErrorMessage(error),
+          });
         }
       })
       .finally(() => {
@@ -507,6 +514,30 @@ export function DataCatalogScene({
       );
     }
 
+    if (
+      selection?.type === "catalog" &&
+      selectedCatalogError?.catalogId === selection.id
+    ) {
+      return (
+        <Alert
+          action={
+            <AppButton
+              onClick={() => {
+                setSelectedCatalogError(null);
+                void loadAll();
+              }}
+              type="link"
+            >
+              {t("common.retry")}
+            </AppButton>
+          }
+          message={selectedCatalogError.message}
+          showIcon
+          type="error"
+        />
+      );
+    }
+
     if (selection?.type === "catalog" && selectedCatalogLoadingId === selection.id) {
       return (
         <div className={styles.placeholder}>
@@ -516,7 +547,12 @@ export function DataCatalogScene({
     }
 
     if (selection?.type === "catalog" && restrictedCatalogId === selection.id) {
-      return <AuthorizedResourceListPanel catalogId={selection.id} onOpenResource={openResourceWorkspace} />;
+      return (
+        <AuthorizedResourceListPanel
+          catalogId={selection.id}
+          onOpenResource={openResourceWorkspace}
+        />
+      );
     }
 
     if (selection?.type === "catalog" && !selectedCatalog) {

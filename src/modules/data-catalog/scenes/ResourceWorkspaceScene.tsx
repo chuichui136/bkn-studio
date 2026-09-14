@@ -41,6 +41,7 @@ import {
   setCatalogResourceEnabled,
 } from "@/modules/data-catalog/services/resource.service";
 import type { BuildTask, CatalogResource } from "@/modules/data-catalog/types/data-catalog";
+import { hasCatalogResourceOperation } from "@/modules/data-catalog/utils/resource-operations";
 import { getCatalog, hasCatalogOperation } from "@/shared/catalog";
 import type { CatalogRecord } from "@/shared/catalog";
 
@@ -102,25 +103,27 @@ export function ResourceWorkspaceScene({
         ) {
           setResource(null);
           setCatalog(null);
+          setCatalogVisibilityRestricted(false);
           setTasks([]);
         }
         return;
       }
 
-      const [catalogRecord, latestTaskPage] = await Promise.all([
-        getCatalog(detail.catalogId, { skipErrorToast: true }).catch((error) => {
+      const catalogRecord = await getCatalog(detail.catalogId, { skipErrorToast: true })
+        .catch((error) => {
           if (isRequestForbidden(error)) {
             return null;
           }
           throw error;
-        }),
-        listBuildTaskPage({
-          direction: "desc",
-          limit: 1,
-          resourceId,
-          sort: "create_time",
-        }),
-      ]);
+        });
+      const latestTaskPage = hasCatalogOperation(catalogRecord, "task_manage")
+        ? await listBuildTaskPage({
+            direction: "desc",
+            limit: 1,
+            resourceId,
+            sort: "create_time",
+          })
+        : { items: [] };
 
       if (resourceVersionRef.current === resourceVersion) {
         setResource(detail);
@@ -185,18 +188,20 @@ export function ResourceWorkspaceScene({
     () => indexStateOf(sortedTasks, resource?.localIndexStatus ?? "unavailable"),
     [resource?.localIndexStatus, sortedTasks],
   );
-  // A hidden parent Catalog has no displayable lifecycle metadata. Query APIs
-  // remain the source of truth for its state; do not fabricate one in the UI.
+  // A directly granted Resource remains readable even when its parent Catalog is hidden.
+  // Do not infer any Catalog metadata or management permission in that restricted view.
   const gate = catalogVisibilityRestricted ? { ok: true } : resourceGateOf(catalog);
-  const hideSemanticUnderstanding = Boolean(catalog?.internal);
+  const canManageCatalogTasks = hasCatalogOperation(catalog, "task_manage");
+  const canModifyResource = hasCatalogOperation(catalog, "resource_manage");
+  const canQueryResource = hasCatalogResourceOperation(resource, "query_data");
+  const canAuthorizeResource = Boolean(!catalog?.internal && canAuthorizeGrants);
+  const hideSemanticUnderstanding = Boolean(catalog?.internal) || !canManageCatalogTasks;
   const discoveryFailed = resource?.lastDiscoverStatus === "error";
   const queryBlockReason = resource ? resourceQueryBlockReason(resource) : null;
   const resourceDisabled = queryBlockReason === "disabled";
   const resourceMissing = queryBlockReason === "missing";
   const resourceStale = queryBlockReason === "stale";
   const metadataUnavailable = queryBlockReason === "metadata_unavailable";
-  const canManageResources = hasCatalogOperation(catalog, "resource_manage");
-  const canManageTasks = hasCatalogOperation(catalog, "task_manage");
 
   useEffect(() => {
     if (hideSemanticUnderstanding && tab === "semantic-understanding") {
@@ -374,7 +379,7 @@ export function ResourceWorkspaceScene({
             </div>
           </div>
           <Space>
-            {canManageTasks ? (
+            {canManageCatalogTasks ? (
               <AppButton
                 disabled={detailEditing}
                 icon={<ReloadOutlined />}
@@ -384,7 +389,7 @@ export function ResourceWorkspaceScene({
                 {t("dataCatalog.resourceWorkspace.refreshMetadata")}
               </AppButton>
             ) : null}
-            {canManageResources ? (
+            {canModifyResource ? (
               <AppButton
                 color={resource.enabled === false ? "green" : undefined}
                 danger={resource.enabled !== false}
@@ -397,7 +402,7 @@ export function ResourceWorkspaceScene({
                 {t(resource.enabled === false ? "common.enable" : "common.disable")}
               </AppButton>
             ) : null}
-            {canAuthorizeGrants && !catalog?.internal ? (
+            {canAuthorizeResource ? (
               <AppButton
                 icon={<KeyOutlined />}
                 onClick={() => setAuthorizeOpen(true)}
@@ -414,10 +419,10 @@ export function ResourceWorkspaceScene({
 
         {discoveryFailed || queryBlockReason ? (
           <Alert
-            action={!resourceDisabled && !resourceStale && (discoveryFailed || resourceMissing) ? (
+            action={canManageCatalogTasks && !resourceDisabled && !resourceStale && (discoveryFailed || resourceMissing) ? (
               <AppButton
                 onClick={() => {
-                  void navigate(`/data-connect/discover?catalogId=${resource.catalogId}`);
+                  void navigate(`/data-connect/${resource.catalogId}/discover`);
                 }}
                 type="link"
               >
@@ -478,7 +483,7 @@ export function ResourceWorkspaceScene({
                 <div className={styles.tabPanel}>
                   <ResourceDetailPanel
                     active={tab === "detail"}
-                    canEdit={canManageResources}
+                    canEdit={canModifyResource}
                     catalog={catalog}
                     onEditingChange={setDetailEditing}
                     onResourceRefreshed={handleResourceRefreshed}
@@ -495,8 +500,8 @@ export function ResourceWorkspaceScene({
                 <div className={[styles.tabPanel, styles.tabPanelPreview].join(" ")}>
                   <ResourcePreviewPanel
                     active={tab === "preview"}
-                    disabled={!gate.ok}
-                    disabledMessage={previewDisabledMessage}
+                    disabled={!gate.ok || !canQueryResource}
+                    disabledMessage={canQueryResource ? previewDisabledMessage : t("common.noPermission")}
                     resource={resource}
                   />
                 </div>
