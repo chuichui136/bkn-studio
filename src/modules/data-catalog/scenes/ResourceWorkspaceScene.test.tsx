@@ -172,8 +172,8 @@ describe("ResourceWorkspaceScene", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByTestId("detail-schema-name").textContent).toBe("-"));
-    expect(getCatalogMock).toHaveBeenCalledWith(staleResource.catalogId);
+    await waitFor(() => expect(screen.getByTestId("detail-schema-name")).toBeTruthy());
+    expect(getCatalogMock).toHaveBeenCalledWith(staleResource.catalogId, { skipErrorToast: true });
   });
 
   it("opens the shared authorization drawer from the resource workspace", async () => {

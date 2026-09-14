@@ -53,6 +53,9 @@ vi.mock("@/modules/data-catalog/components/CatalogTreePanel", () => ({
 vi.mock("@/modules/data-catalog/components/ResourceFormDrawer", () => ({
   ResourceFormDrawer: () => null,
 }));
+vi.mock("@/modules/data-catalog/components/AuthorizedResourceListPanel", () => ({
+  AuthorizedResourceListPanel: ({ catalogId }: { catalogId: string }) => <output data-testid="authorized-catalog-id">{catalogId}</output>,
+}));
 vi.mock("@/modules/data-catalog/components/CatalogDetailPanel", () => ({
   default: ({ catalog }: { catalog: CatalogRecord }) => <output data-testid="selected-catalog-id">{catalog.id}</output>,
 }));
@@ -188,7 +191,7 @@ describe("DataCatalogScene", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(getCatalogMock).toHaveBeenCalledWith("catalog-1"));
+    await waitFor(() => expect(getCatalogMock).toHaveBeenCalledWith("catalog-1", { skipErrorToast: true }));
     await waitFor(() => expect(screen.getByTestId("selected-catalog-id").textContent).toBe("catalog-1"));
 
     listCatalogsMock.mockImplementation((query: CatalogListQuery) => Promise.resolve(
@@ -231,8 +234,8 @@ describe("DataCatalogScene", () => {
       limit: 1,
       offset: 0,
     }));
-    await waitFor(() => expect(screen.getByTestId("selected-catalog-id").textContent).toBe("catalog-1"));
-    expect(getCatalogMock).toHaveBeenCalledWith("catalog-1");
+    await waitFor(() => expect(screen.getByTestId("authorized-catalog-id").textContent).toBe("catalog-1"));
+    expect(getCatalogMock).toHaveBeenCalledWith("catalog-1", { skipErrorToast: true });
   });
 
   it("does not duplicate a deep-linked physical catalog when loading its later page", async () => {
@@ -386,7 +389,7 @@ describe("DataCatalogScene", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(getCatalogMock).toHaveBeenCalledWith("catalog-1"));
+    await waitFor(() => expect(getCatalogMock).toHaveBeenCalledWith("catalog-1", { skipErrorToast: true }));
     fireEvent.click(screen.getByRole("button", { name: "enter search keyword" }));
     fireEvent.click(screen.getByRole("button", { name: "search catalogs" }));
     await waitFor(() => expect(screen.getByTestId("catalog-ids").textContent).toBe(""));
@@ -413,7 +416,7 @@ describe("DataCatalogScene", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(getCatalogMock).toHaveBeenCalledWith("catalog-1"));
+    await waitFor(() => expect(getCatalogMock).toHaveBeenCalledWith("catalog-1", { skipErrorToast: true }));
     fireEvent.click(screen.getByRole("button", { name: "enter search keyword" }));
     fireEvent.click(screen.getByRole("button", { name: "search catalogs" }));
     await waitFor(() => expect(screen.getByTestId("catalog-ids").textContent).toBe(""));

@@ -18,6 +18,7 @@ import {
   CatalogTreePanel,
   type CatalogTreeSelection,
 } from "@/modules/data-catalog/components/CatalogTreePanel";
+import { AuthorizedResourceListPanel } from "@/modules/data-catalog/components/AuthorizedResourceListPanel";
 import { ResourceFormDrawer } from "@/modules/data-catalog/components/ResourceFormDrawer";
 import { subscribeMockDb } from "@/modules/data-catalog/services/mock-db";
 import {
@@ -39,38 +40,6 @@ import styles from "./DataCatalogScene.module.css";
 
 const useMock = import.meta.env.VITE_USE_MOCK !== "false";
 const CATALOG_PAGE_SIZE = 100;
-
-// A direct Resource grant does not grant access to the parent Catalog detail.
-// This placeholder exists only so the existing resource-list view can render
-// resources returned by the server's Resource PEP. It intentionally contains
-// no Catalog configuration and is marked internal/read-only to suppress every
-// Catalog management affordance.
-function restrictedCatalog(catalogId: string): CatalogRecord {
-  return {
-    category: "",
-    connectorConfig: {},
-    connectorType: "",
-    createTime: null,
-    creatorName: "",
-    description: "",
-    enabled: true,
-    expectedUpdateTime: 0,
-    healthCheckResult: "",
-    healthStatus: "unchecked",
-    id: catalogId,
-    internal: true,
-    lastCheckTime: null,
-    metadata: {},
-    mode: "",
-    name: catalogId,
-    operations: [],
-    status: "enabled",
-    tags: [],
-    type: "physical",
-    updateTime: null,
-    updaterName: "",
-  };
-}
 
 const CatalogDetailPanel = lazy(
   () => import("@/modules/data-catalog/components/CatalogDetailPanel"),
@@ -103,6 +72,7 @@ export function DataCatalogScene({
   const [catalogSearchLoading, setCatalogSearchLoading] = useState(false);
   const [connectorTypeStats, setConnectorTypeStats] = useState<CatalogConnectorTypeStat[]>([]);
   const [selectedCatalogLoadingId, setSelectedCatalogLoadingId] = useState<string | null>(null);
+  const [restrictedCatalogId, setRestrictedCatalogId] = useState<string | null>(null);
   const [discover, setDiscovers] = useState<CatalogDiscoverRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -275,7 +245,8 @@ export function DataCatalogScene({
     selectedCatalogRequestIds.current.add(selection.id);
     setSelectedCatalogLoadingId(selection.id);
     const generation = catalogQueryGeneration.current;
-    void getCatalog(selection.id)
+    setRestrictedCatalogId(null);
+    void getCatalog(selection.id, { skipErrorToast: true })
       .then((catalog) => {
         if (
           !catalog ||
@@ -306,10 +277,7 @@ export function DataCatalogScene({
               && generation === catalogQueryGeneration.current
               && selectedCatalogIdRef.current === selection.id
             ) {
-              const catalog = restrictedCatalog(selection.id);
-              setCatalogs((current) => (
-                current.some((item) => item.id === catalog.id) ? current : [...current, catalog]
-              ));
+              setRestrictedCatalogId(selection.id);
               return;
             }
           } catch {
@@ -443,6 +411,10 @@ export function DataCatalogScene({
           <Spin />
         </div>
       );
+    }
+
+    if (selection?.type === "catalog" && restrictedCatalogId === selection.id) {
+      return <AuthorizedResourceListPanel catalogId={selection.id} onOpenResource={openResourceWorkspace} />;
     }
 
     if (selection?.type === "catalog" && !selectedCatalog) {

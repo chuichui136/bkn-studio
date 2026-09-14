@@ -58,36 +58,6 @@ type ResourceWorkspaceSceneProps = {
   tab: ResourceWorkspaceTab;
 };
 
-// A direct Resource grant may not reveal the parent Catalog. Keep enough
-// lifecycle state for the workspace to stay usable, but deliberately expose
-// neither Catalog configuration nor management affordances.
-function restrictedCatalog(catalogId: string): CatalogRecord {
-  return {
-    category: "",
-    connectorConfig: {},
-    connectorType: "",
-    createTime: null,
-    creatorName: "",
-    description: "",
-    enabled: true,
-    expectedUpdateTime: 0,
-    healthCheckResult: "",
-    healthStatus: "unchecked",
-    id: catalogId,
-    internal: true,
-    lastCheckTime: null,
-    metadata: {},
-    mode: "",
-    name: catalogId,
-    operations: [],
-    status: "enabled",
-    tags: [],
-    type: "physical",
-    updateTime: null,
-    updaterName: "",
-  };
-}
-
 export function ResourceWorkspaceScene({
   indexView,
   indexViewExplicit = false,
@@ -107,6 +77,7 @@ export function ResourceWorkspaceScene({
   });
   const [resource, setResource] = useState<CatalogResource | null>(null);
   const [catalog, setCatalog] = useState<CatalogRecord | null>(null);
+  const [catalogVisibilityRestricted, setCatalogVisibilityRestricted] = useState(false);
   const [tasks, setTasks] = useState<BuildTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -138,9 +109,9 @@ export function ResourceWorkspaceScene({
       }
 
       const [catalogRecord, latestTaskPage] = await Promise.all([
-        getCatalog(detail.catalogId).catch((error) => {
+        getCatalog(detail.catalogId, { skipErrorToast: true }).catch((error) => {
           if (isRequestForbidden(error)) {
-            return restrictedCatalog(detail.catalogId);
+            return null;
           }
           throw error;
         }),
@@ -157,6 +128,7 @@ export function ResourceWorkspaceScene({
       }
       if (loadRequestIdRef.current === loadRequestId) {
         setCatalog(catalogRecord);
+        setCatalogVisibilityRestricted(catalogRecord === null);
         setTasks(latestTaskPage.items);
       }
     } catch (error) {
@@ -167,6 +139,7 @@ export function ResourceWorkspaceScene({
         setResource(null);
         setLoadError(extractRequestErrorMessage(error));
         setCatalog(null);
+        setCatalogVisibilityRestricted(false);
         setTasks([]);
       }
     } finally {
@@ -213,7 +186,9 @@ export function ResourceWorkspaceScene({
     () => indexStateOf(sortedTasks, resource?.localIndexStatus ?? "unavailable"),
     [resource?.localIndexStatus, sortedTasks],
   );
-  const gate = resourceGateOf(catalog);
+  // A hidden parent Catalog has no displayable lifecycle metadata. Query APIs
+  // remain the source of truth for its state; do not fabricate one in the UI.
+  const gate = catalogVisibilityRestricted ? { ok: true } : resourceGateOf(catalog);
   const hideSemanticUnderstanding = Boolean(catalog?.internal);
   const discoveryFailed = resource?.lastDiscoverStatus === "error";
   const queryBlockReason = resource ? resourceQueryBlockReason(resource) : null;
