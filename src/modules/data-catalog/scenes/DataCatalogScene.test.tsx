@@ -6,7 +6,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { AxiosError } from "axios";
+import { AxiosError, AxiosHeaders } from "axios";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -219,7 +219,13 @@ describe("DataCatalogScene", () => {
       undefined,
       undefined,
       undefined,
-      { status: 403, statusText: "Forbidden", headers: {}, config: { headers: {} }, data: {} },
+      {
+        status: 403,
+        statusText: "Forbidden",
+        headers: new AxiosHeaders(),
+        config: { headers: new AxiosHeaders() },
+        data: {},
+      },
     ));
     listCatalogResourcePageMock.mockResolvedValue({ items: [{ id: "resource-a" }], total: 1 });
 

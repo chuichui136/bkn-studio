@@ -6,7 +6,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { AxiosError } from "axios";
+import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CatalogResource } from "@/modules/data-catalog/types/data-catalog";
@@ -159,7 +159,13 @@ describe("ResourceWorkspaceScene", () => {
       undefined,
       undefined,
       undefined,
-      { status: 403, statusText: "Forbidden", headers: {}, config: { headers: {} }, data: {} },
+      {
+        status: 403,
+        statusText: "Forbidden",
+        headers: new AxiosHeaders(),
+        config: { headers: new AxiosHeaders() },
+        data: {},
+      },
     ));
 
     render(
