@@ -9,12 +9,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getMock = vi.hoisted(() => vi.fn());
 const postMock = vi.hoisted(() => vi.fn());
+const listActionTypesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/framework/request/http", () => ({
   http: { get: getMock, post: postMock },
 }));
+vi.mock("@/modules/knowledge-network/services/action-type.service", () => ({
+  listKnowledgeNetworkActionTypes: listActionTypesMock,
+}));
 
-import { resolveGrantNames } from "@/modules/system-admin/services/authz-objects.service";
+import {
+  listTopResourceChildCategories,
+  listTopResourceChildren,
+  listTopLevelAuthzObjects,
+  resolveGrantNames,
+} from "@/modules/system-admin/services/authz-objects.service";
 import type { ObjectGrant } from "@/modules/system-admin/types/authz";
 
 /** Resource objects use Vega's legacy batch name-resolution endpoint with comma-separated IDs in the path. */
@@ -142,5 +151,132 @@ describe("authz-objects · resolveGrantNames 取名不再打请求风暴", () =>
     // The second run hits cache completely and makes no new requests.
     expect(getMock.mock.calls.length).toBe(afterFirst);
     expect(again.map((grant) => grant.objName)).toEqual(["c-cache-1", "c-cache-2"]);
+  });
+
+  it("知识网络子对象显示业务名称和所属知识网络，而不是 opaque 复合 ID", async () => {
+    postMock.mockResolvedValue({
+      data: { entries: [{ id: "ecommerce-ops", name: "电商经营决策知识网络" }] },
+    });
+    listActionTypesMock.mockResolvedValue([{ id: "simulate-fulfillment", name: "模拟履约" }]);
+
+    const [resolved] = await resolveGrantNames([{
+      accessorId: "u1",
+      objId: "ecommerce-ops/simulate-fulfillment",
+      objName: "ecommerce-ops/simulate-fulfillment",
+      objType: "action_type",
+      operations: ["execute"],
+    }]);
+
+    expect(resolved.objName).toBe("模拟履约");
+    expect(resolved.objSub).toBe("电商经营决策知识网络");
+    expect(listActionTypesMock).toHaveBeenCalledWith("ecommerce-ops");
+  });
+
+  it("数据资源显示业务名称和所属数据目录", async () => {
+    getMock.mockImplementation((url: string) => {
+      if (url.startsWith("/vega-backend/v1/resources/")) {
+        return Promise.resolve({
+          data: { entries: [{ catalog_id: "catalog-sales", id: "resource-orders", name: "销售订单" }] },
+        });
+      }
+      if (url.startsWith("/vega-backend/v1/catalogs/")) {
+        return Promise.resolve({
+          data: { entries: [{ id: "catalog-sales", name: "销售数据目录" }] },
+        });
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    });
+
+    const [resolved] = await resolveGrantNames([resourceGrant("resource-orders")]);
+
+    expect(resolved.objName).toBe("销售订单");
+    expect(resolved.objSub).toBe("销售数据目录");
+  });
+
+  it("顶级资源按领域接口的 offset/limit 分页，不拉取完整资源集", async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: [{ id: "kn-21", name: "第 21 个知识网络" }],
+        total_count: 53,
+      },
+    });
+
+    const result = await listTopLevelAuthzObjects("knowledge_network", "电商", {
+      limit: 20,
+      offset: 20,
+    });
+
+    expect(result).toEqual({
+      objects: [{ id: "kn-21", name: "第 21 个知识网络", type: "knowledge_network" }],
+      total: 53,
+    });
+    expect(getMock).toHaveBeenCalledWith("/bkn-backend/v1/knowledge-networks", {
+      params: { limit: 20, name_pattern: "电商", offset: 20 },
+      skipErrorToast: true,
+    });
+  });
+
+  it("清空顶级资源类型时聚合各类型总数，仍按全局页码取资源", async () => {
+    getMock.mockImplementation((path: string, options: { params: Record<string, number> }) => {
+      const { limit, offset } = options.params;
+      if (path === "/vega-backend/v1/catalogs") {
+        return Promise.resolve({
+          data: {
+            entries: offset === 2 ? [{ id: "catalog-3", name: "第三个目录" }] : [],
+            total_count: 3,
+          },
+        });
+      }
+      if (path === "/bkn-backend/v1/knowledge-networks") {
+        return Promise.resolve({
+          data: {
+            entries: limit === 3 ? [
+              { id: "kn-1", name: "第一个知识网络" },
+              { id: "kn-2", name: "第二个知识网络" },
+              { id: "kn-3", name: "第三个知识网络" },
+            ] : [],
+            total_count: 5,
+          },
+        });
+      }
+      return Promise.resolve({ data: { data: [], total: 0 } });
+    });
+
+    await expect(listTopLevelAuthzObjects(undefined, "", { limit: 4, offset: 2 })).resolves.toEqual({
+      objects: [
+        { id: "catalog-3", name: "第三个目录", type: "catalog" },
+        { id: "kn-1", name: "第一个知识网络", type: "knowledge_network" },
+        { id: "kn-2", name: "第二个知识网络", type: "knowledge_network" },
+        { id: "kn-3", name: "第三个知识网络", type: "knowledge_network" },
+      ],
+      total: 8,
+    });
+  });
+
+  it("数据目录的子资源按所属目录分页，并保留后端总数", async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: [{ id: "resource-11", name: "第 11 个资源" }],
+        total_count: 37,
+      },
+    });
+    const catalog = { id: "catalog-1", name: "销售目录", type: "catalog" } as const;
+
+    expect(listTopResourceChildCategories(catalog)).toEqual(["resource"]);
+    await expect(listTopResourceChildren(catalog, "resource", { limit: 10, offset: 10 })).resolves.toEqual({
+      category: "resource",
+      children: [{
+        category: "resource",
+        id: "resource-11",
+        name: "第 11 个资源",
+        sub: "销售目录",
+        type: "resource",
+      }],
+      total: 37,
+    });
+    expect(getMock).toHaveBeenCalledWith("/vega-backend/v1/resources", {
+      params: { catalog_id: "catalog-1", limit: 10, offset: 10 },
+      skipErrorToast: true,
+    });
   });
 });

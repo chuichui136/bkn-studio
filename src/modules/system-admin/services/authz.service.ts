@@ -223,6 +223,8 @@ export type AuthzGroup = {
   objType?: string;
   objId?: string;
   objName?: string;
+  /** Optional parent context resolved by the frontend, e.g. knowledge-network name. */
+  objSub?: string;
   accessorId?: string;
   /** Object mode counts grantees; grantee mode counts objects. */
   count: number;
