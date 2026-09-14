@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAppServices } from "@/framework/context/use-app-services";
 import { PermissionGate } from "@/framework/permission/PermissionGate";
-import { extractRequestErrorMessage } from "@/framework/request/error-message";
+import { extractRequestErrorMessage, isRequestForbidden } from "@/framework/request/error-message";
 import { hasPermissions } from "@/framework/permission/has-permissions";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { SceneBackButton } from "@/framework/ui/common/SceneBackButton";
@@ -57,6 +57,36 @@ type ResourceWorkspaceSceneProps = {
   resourceId: string;
   tab: ResourceWorkspaceTab;
 };
+
+// A direct Resource grant may not reveal the parent Catalog. Keep enough
+// lifecycle state for the workspace to stay usable, but deliberately expose
+// neither Catalog configuration nor management affordances.
+function restrictedCatalog(catalogId: string): CatalogRecord {
+  return {
+    category: "",
+    connectorConfig: {},
+    connectorType: "",
+    createTime: null,
+    creatorName: "",
+    description: "",
+    enabled: true,
+    expectedUpdateTime: 0,
+    healthCheckResult: "",
+    healthStatus: "unchecked",
+    id: catalogId,
+    internal: true,
+    lastCheckTime: null,
+    metadata: {},
+    mode: "",
+    name: catalogId,
+    operations: [],
+    status: "enabled",
+    tags: [],
+    type: "physical",
+    updateTime: null,
+    updaterName: "",
+  };
+}
 
 export function ResourceWorkspaceScene({
   indexView,
@@ -108,7 +138,12 @@ export function ResourceWorkspaceScene({
       }
 
       const [catalogRecord, latestTaskPage] = await Promise.all([
-        getCatalog(detail.catalogId),
+        getCatalog(detail.catalogId).catch((error) => {
+          if (isRequestForbidden(error)) {
+            return restrictedCatalog(detail.catalogId);
+          }
+          throw error;
+        }),
         listBuildTaskPage({
           direction: "desc",
           limit: 1,

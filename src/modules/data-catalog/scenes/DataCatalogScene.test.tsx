@@ -6,6 +6,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { AxiosError } from "axios";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +14,7 @@ import type { CatalogListQuery, CatalogRecord } from "@/shared/catalog";
 
 const countCatalogResourcesMock = vi.hoisted(() => vi.fn());
 const getCatalogMock = vi.hoisted(() => vi.fn());
+const listCatalogResourcePageMock = vi.hoisted(() => vi.fn());
 const listCatalogsMock = vi.hoisted(() => vi.fn());
 const listCatalogConnectorTypeStatsMock = vi.hoisted(() => vi.fn());
 const subscribeMockDbMock = vi.hoisted(() => vi.fn());
@@ -60,6 +62,7 @@ vi.mock("@/modules/data-catalog/services/mock-db", () => ({
 vi.mock("@/modules/data-catalog/services/resource.service", () => ({
   countCatalogResources: countCatalogResourcesMock,
   isCatalogDiscovering: () => false,
+  listCatalogResourcePage: listCatalogResourcePageMock,
   listCatalogDiscovers: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("@/shared/catalog", () => ({
@@ -106,6 +109,7 @@ describe("DataCatalogScene", () => {
     vi.clearAllMocks();
     countCatalogResourcesMock.mockResolvedValue(0);
     getCatalogMock.mockResolvedValue(undefined);
+    listCatalogResourcePageMock.mockResolvedValue({ items: [], total: 0 });
     listCatalogsMock.mockResolvedValue({ items: [catalog], total: 1 });
     listCatalogConnectorTypeStatsMock.mockResolvedValue([{
       catalogType: "physical",
@@ -203,6 +207,32 @@ describe("DataCatalogScene", () => {
       type: "physical",
     }));
     expect(screen.getByTestId("catalog-ids").textContent).toBe("catalog-1");
+  });
+
+  it("keeps a catalog route read-only when only child resources are granted", async () => {
+    listCatalogsMock.mockResolvedValue({ items: [], total: 0 });
+    getCatalogMock.mockRejectedValue(new AxiosError(
+      "Forbidden",
+      undefined,
+      undefined,
+      undefined,
+      { status: 403, statusText: "Forbidden", headers: {}, config: { headers: {} }, data: {} },
+    ));
+    listCatalogResourcePageMock.mockResolvedValue({ items: [{ id: "resource-a" }], total: 1 });
+
+    render(
+      <MemoryRouter initialEntries={["/data-catalog/catalog/catalog-1"]}>
+        <DataCatalogScene selection={{ id: "catalog-1", type: "catalog" }} suppressAutoSelect />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(listCatalogResourcePageMock).toHaveBeenCalledWith({
+      catalogId: "catalog-1",
+      limit: 1,
+      offset: 0,
+    }));
+    await waitFor(() => expect(screen.getByTestId("selected-catalog-id").textContent).toBe("catalog-1"));
+    expect(getCatalogMock).toHaveBeenCalledWith("catalog-1");
   });
 
   it("does not duplicate a deep-linked physical catalog when loading its later page", async () => {

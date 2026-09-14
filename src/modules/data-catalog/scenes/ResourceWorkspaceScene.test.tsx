@@ -6,6 +6,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CatalogResource } from "@/modules/data-catalog/types/data-catalog";
@@ -149,6 +150,30 @@ describe("ResourceWorkspaceScene", () => {
       resourceId: staleResource.id,
       sort: "create_time",
     }));
+  });
+
+  it("keeps a directly granted resource available when the parent catalog is forbidden", async () => {
+    getCatalogResourceMock.mockResolvedValue(staleResource);
+    getCatalogMock.mockRejectedValue(new AxiosError(
+      "Forbidden",
+      undefined,
+      undefined,
+      undefined,
+      { status: 403, statusText: "Forbidden", headers: {}, config: { headers: {} }, data: {} },
+    ));
+
+    render(
+      <ResourceWorkspaceScene
+        indexView="config"
+        onIndexViewChange={vi.fn()}
+        onTabChange={vi.fn()}
+        resourceId={staleResource.id}
+        tab="detail"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("detail-schema-name").textContent).toBe("-"));
+    expect(getCatalogMock).toHaveBeenCalledWith(staleResource.catalogId);
   });
 
   it("opens the shared authorization drawer from the resource workspace", async () => {

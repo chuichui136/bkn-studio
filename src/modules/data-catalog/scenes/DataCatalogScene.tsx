@@ -11,7 +11,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { extractRequestErrorMessage } from "@/framework/request/error-message";
+import { extractRequestErrorMessage, isRequestForbidden } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { EmptyStatePanel } from "@/framework/ui/common/EmptyStatePanel";
 import {
@@ -23,6 +23,7 @@ import { subscribeMockDb } from "@/modules/data-catalog/services/mock-db";
 import {
   countCatalogResources,
   isCatalogDiscovering,
+  listCatalogResourcePage,
   listCatalogDiscovers,
 } from "@/modules/data-catalog/services/resource.service";
 import type { CatalogDiscoverRecord } from "@/modules/data-catalog/types/data-catalog";
@@ -38,6 +39,38 @@ import styles from "./DataCatalogScene.module.css";
 
 const useMock = import.meta.env.VITE_USE_MOCK !== "false";
 const CATALOG_PAGE_SIZE = 100;
+
+// A direct Resource grant does not grant access to the parent Catalog detail.
+// This placeholder exists only so the existing resource-list view can render
+// resources returned by the server's Resource PEP. It intentionally contains
+// no Catalog configuration and is marked internal/read-only to suppress every
+// Catalog management affordance.
+function restrictedCatalog(catalogId: string): CatalogRecord {
+  return {
+    category: "",
+    connectorConfig: {},
+    connectorType: "",
+    createTime: null,
+    creatorName: "",
+    description: "",
+    enabled: true,
+    expectedUpdateTime: 0,
+    healthCheckResult: "",
+    healthStatus: "unchecked",
+    id: catalogId,
+    internal: true,
+    lastCheckTime: null,
+    metadata: {},
+    mode: "",
+    name: catalogId,
+    operations: [],
+    status: "enabled",
+    tags: [],
+    type: "physical",
+    updateTime: null,
+    updaterName: "",
+  };
+}
 
 const CatalogDetailPanel = lazy(
   () => import("@/modules/data-catalog/components/CatalogDetailPanel"),
@@ -255,7 +288,35 @@ export function DataCatalogScene({
           current.some((item) => item.id === catalog.id) ? current : [...current, catalog]
         ));
       })
-      .catch((error) => {
+      .catch(async (error) => {
+        if (isRequestForbidden(error)) {
+          // A Resource can be directly granted without catalog:view_detail. In
+          // that case the public Catalog detail call is correctly forbidden, but
+          // the Resource list still applies the child-level PEP. Use that list
+          // solely to establish whether this route has authorized children; do
+          // not turn the 403 into access to the parent Catalog itself.
+          try {
+            const resources = await listCatalogResourcePage({
+              catalogId: selection.id,
+              limit: 1,
+              offset: 0,
+            });
+            if (
+              resources.total > 0
+              && generation === catalogQueryGeneration.current
+              && selectedCatalogIdRef.current === selection.id
+            ) {
+              const catalog = restrictedCatalog(selection.id);
+              setCatalogs((current) => (
+                current.some((item) => item.id === catalog.id) ? current : [...current, catalog]
+              ));
+              return;
+            }
+          } catch {
+            // Keep the original Catalog error below. A failed child lookup must
+            // never make a parent route appear accessible.
+          }
+        }
         if (
           generation === catalogQueryGeneration.current &&
           selectedCatalogIdRef.current === selection.id
