@@ -227,28 +227,6 @@
   gap: 12px;
 }
 
-.permissionHelpButton {
-  flex: 0 0 auto;
-  color: var(--admin-color-secondary);
-}
-
-.permissionHelpContent {
-  width: min(380px, calc(100vw - 48px));
-}
-
-.permissionHelpContent p {
-  margin: 0;
-  color: var(--admin-color-secondary);
-  font-size: var(--admin-font-size-meta);
-  line-height: 1.7;
-}
-
-.permissionHelpContent .actionLink {
-  height: auto;
-  padding-inline: 3px;
-  font-size: inherit;
-}
-
 .toolbarMeta {
   composes: toolbarMeta from "../../../framework/ui/common/BusinessPageTemplate.module.css";
   flex: 1;
@@ -818,6 +796,15 @@
   overflow-x: auto;
   overflow-y: visible;
   min-height: auto;
+  padding-top: 14px;
+}
+
+/* The object workbench is a resource hierarchy, not a wide table. Do not reuse the table
+ * wrapper here: `overflow-x: auto` coerces vertical overflow to auto in CSS and creates a
+ * second vertical scrollbar alongside the page scrollbar. */
+.objectWorkbenchSurface {
+  min-width: 0;
+  overflow: visible;
   padding-top: 14px;
 }
 
@@ -2003,33 +1990,196 @@
   white-space: nowrap;
 }
 
-/* ---- authorizations overview (stat strip + grouped views) ---- */
+/* ---- authorization workbenches ---- */
 
-.statStrip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+.authzGlobalActions {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  padding-bottom: 12px;
 }
 
-.statCard {
+.authzWorkspaceTabs :global(.ant-tabs-nav) {
+  margin: 0;
+  padding: 0;
+}
+
+.authzWorkspaceTabs :global(.ant-tabs-tab) {
+  padding: 11px 18px;
+  font-size: 14px;
+}
+
+.authzWorkspaceTabs :global(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+  color: var(--admin-color-primary);
+  font-weight: var(--admin-font-weight-strong);
+}
+
+.authzWorkspaceTabs :global(.ant-tabs-ink-bar) {
+  background: var(--admin-color-primary);
+}
+
+.authzWorkspacePane {
+  padding-top: 0;
+}
+
+.memberAuthorizationLayout {
   display: grid;
-  gap: 4px;
-  padding: 12px 14px;
+  grid-template-columns: 288px minmax(0, 1fr);
+  min-height: 520px;
   border: 1px solid var(--admin-color-border);
-  border-radius: 0;
   background: var(--admin-color-surface);
 }
 
-.statLabel {
-  color: var(--admin-color-secondary);
-  font-size: var(--admin-font-size-meta);
+.memberUserPane {
+  display: flex;
+  min-width: 0;
+  min-height: 520px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-right: 1px solid var(--admin-color-border);
+  background: var(--admin-color-surface-muted);
 }
 
-.statValue {
+.memberUserHead h2 {
+  margin: 0;
   color: var(--admin-color-heading);
-  font-size: 22px;
-  font-weight: var(--admin-font-weight-stat);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.memberUserHead p {
+  margin: 4px 0 0;
+  color: var(--admin-color-secondary);
+  font-size: var(--admin-font-size-tag);
+  line-height: 1.55;
+}
+
+.memberUserPicker {
+  min-height: 360px;
+}
+
+.memberDetailPane {
+  min-width: 0;
+}
+
+.memberPaneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--admin-color-border);
+  background: var(--admin-color-surface-muted);
+}
+
+.memberPaneHeader > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.memberIdentityHeader {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.memberIdentityHeader :global(.ant-tag) {
+  margin: 0;
+}
+
+.memberPaneHeader strong { color: var(--admin-color-heading); }
+.memberPaneHint,
+.memberName small,
+.memberResourceId {
+  display: block;
+  margin: 0;
+  color: var(--admin-color-muted);
+  font-size: var(--admin-font-size-tag);
+}
+.memberResourceCell { display: grid; gap: 3px; min-width: 0; }
+.memberResourceCell strong { color: var(--admin-color-heading); font-weight: var(--admin-font-weight-medium); }
+.memberResourceCell small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.memberPermissionOverview {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.memberPermissionOverview :global(.ant-tag) { margin: 0; }
+.memberPermissionOverview :global(.ant-btn) { height: auto; padding-inline: 4px; }
+.memberPermissionDetail { display: grid; gap: 16px; }
+.memberPermissionResource {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--admin-color-border);
+  background: var(--admin-color-surface-muted);
+}
+.memberPermissionResource strong { color: var(--admin-color-heading); }
+.memberPermissionResource small,
+.memberPermissionDetail > p,
+.memberPermissionDecision small {
+  margin: 0;
+  color: var(--admin-color-secondary);
+  font-size: var(--admin-font-size-tag);
+  overflow-wrap: anywhere;
+}
+.memberPermissionDecisionList { display: grid; border-top: 1px solid var(--admin-color-border); }
+.memberPermissionDecision {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--admin-color-border);
+}
+.memberPermissionDecision :global(.ant-tag) { margin: 0; }
+.memberPermissionDecision > :last-child { grid-column: 1 / -1; }
+.memberSuperAdminAccess {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 16px;
+  padding: 20px;
+  border: 1px solid var(--admin-color-primary-border);
+  background: var(--admin-color-link-bg);
+}
+.memberSuperAdminAccess > strong {
+  color: var(--admin-color-primary);
+  font-size: 42px;
+  line-height: 1;
+}
+.memberSuperAdminAccess h3 {
+  margin: 0;
+  color: var(--admin-color-heading);
+  font-size: 16px;
+}
+.memberSuperAdminAccess p {
+  margin: 6px 0 0;
+  color: var(--admin-color-secondary);
+  font-size: var(--admin-font-size-tag);
+  line-height: 1.6;
+}
+.memberName { display: inline-grid; gap: 2px; color: var(--admin-color-heading); }
+.memberSelectedRow > :global(td) { background: var(--admin-color-link-bg) !important; }
+
+@media (max-width: 1200px) {
+  .memberAuthorizationLayout { grid-template-columns: 260px minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .memberAuthorizationLayout { grid-template-columns: 1fr; }
+  .memberUserPane { border-right: 0; border-bottom: 1px solid var(--admin-color-border); }
 }
 
 .statValueCompact {
@@ -2618,12 +2768,6 @@
 }
 
 @media (max-width: 1200px) {
-  .statStrip {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 1200px) {
   .contentSurface {
     padding-right: 12px;
     padding-left: 12px;
@@ -2824,4 +2968,143 @@
 .auditActionChip > :last-child {
   min-width: 0;
   flex: 1;
+}
+
+.topResourceWorkbench {
+  min-height: 420px;
+}
+
+.topResourceToolbar {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--admin-color-border-soft);
+}
+
+.topResourceName small,
+.topResourceChildRow small {
+  color: var(--admin-color-text-secondary);
+  font-size: 13px;
+}
+
+.topResourceToolbar :global(.ant-input-search) {
+  width: min(360px, 100%);
+}
+
+.topResourceToolbar :global(.ant-select) {
+  width: 180px;
+}
+
+.topResourceLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 168px;
+  color: var(--admin-color-text-secondary);
+}
+
+.topResourceRow {
+  display: grid;
+  grid-template-columns: 28px 38px minmax(240px, 1fr) 130px 70px;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 76px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--admin-color-border-soft);
+}
+
+.topResourceRow:hover {
+  background: var(--admin-color-fill-secondary);
+}
+
+.topResourceToggle {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  color: var(--admin-color-text-secondary);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.topResourceToggle:hover {
+  color: var(--admin-color-primary);
+  background: var(--admin-color-fill-hover);
+}
+
+.topResourceName,
+.topResourceChildRow > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.topResourceName strong,
+.topResourceChildRow strong {
+  overflow: hidden;
+  color: var(--admin-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topResourceChildren {
+  grid-column: 2 / -1;
+  margin: 2px 0 16px;
+  padding: 8px 0 0 20px;
+  border-left: 2px solid var(--admin-color-primary-border);
+}
+
+.topResourceCategoryHead,
+.topResourceChildRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topResourceCategory {
+  margin-top: 10px;
+}
+
+.topResourceCategoryHead {
+  padding: 7px 12px;
+  color: var(--admin-color-text-secondary);
+  font-size: 13px;
+}
+
+.topResourceChildRow {
+  min-height: 48px;
+  padding: 7px 12px 7px 26px;
+  border-top: 1px solid var(--admin-color-border-soft);
+}
+
+@media (max-width: 900px) {
+  .topResourceToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topResourceToolbar :global(.ant-input-search) {
+    width: 100%;
+  }
+
+  .topResourceRow {
+    grid-template-columns: 28px 34px minmax(0, 1fr) auto;
+    row-gap: 8px;
+    padding-block: 12px;
+  }
+
+  .topResourceRow > :nth-child(4) {
+    grid-column: 3 / -1;
+  }
+
+  .topResourceChildren {
+    grid-column: 2 / -1;
+  }
 }
