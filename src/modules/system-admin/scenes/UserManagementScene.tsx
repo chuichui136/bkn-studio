@@ -9,7 +9,7 @@ import { EllipsisOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icon
 import { Alert, Dropdown, Input, Select, Tag, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -142,9 +142,7 @@ export function UserManagementScene() {
 
   const [keywordDraft, setKeywordDraft] = useState(urlFilters.keyword);
   const debouncedKeyword = useDebouncedValue(keywordDraft.trim());
-  const tableSectionRef = useRef<HTMLDivElement>(null);
   const explorerRef = useRef<HTMLDivElement>(null);
-  const [tableScrollY, setTableScrollY] = useState(360);
   const [deptPanelWidth, setDeptPanelWidth] = useState(DEPT_PANEL_DEFAULT_WIDTH);
   const resizeState = useRef<{ pointerId: number; startWidth: number; startX: number } | null>(null);
   const usersRequestSeq = useRef(0);
@@ -271,20 +269,6 @@ export function UserManagementScene() {
     }
     updateUrlFilters({ keyword: debouncedKeyword, page: 1 });
   }, [debouncedKeyword, updateUrlFilters, urlFilters.keyword]);
-
-  useLayoutEffect(() => {
-    const element = tableSectionRef.current;
-    if (!element) {
-      return;
-    }
-    const updateHeight = () => {
-      setTableScrollY(Math.max(240, element.clientHeight - 4));
-    };
-    updateHeight();
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     if (!selectedDeptId || !departments.length) {
@@ -810,7 +794,7 @@ export function UserManagementScene() {
               </div>
             </div>
 
-            <div className={layoutStyles.tableSection} ref={tableSectionRef}>
+            <div className={[layoutStyles.tableSection, layoutStyles.userTableSection].join(" ")}>
               {loadError ? (
                 <Alert
                   action={
@@ -830,7 +814,7 @@ export function UserManagementScene() {
                   locale={{ emptyText: t("systemAdmin.users.emptyUsers") }}
                   pagination={false}
                   rowKey="id"
-                  scroll={{ x: 1080, y: tableScrollY }}
+                  scroll={{ x: 1080 }}
                 />
               )}
             </div>
