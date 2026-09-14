@@ -73,6 +73,23 @@ describe("object-type-resource.service", () => {
     expect(postMock).not.toHaveBeenCalled();
   });
 
+  it("keeps backend authorization as the fallback when resource operations are unavailable", async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: [{ id: "r-1", name: "orders", schema_definition: [{ name: "id" }] }],
+      },
+    });
+    postMock.mockResolvedValue({ data: { entries: [{ id: 1 }], total_count: 1 } });
+    const { getObjectTypeResourcePreview } = await import(
+      "@/modules/knowledge-network/services/object-type-resource.service"
+    );
+
+    const result = await getObjectTypeResourcePreview("kn-1", "r-1");
+
+    expect(result).toMatchObject({ name: "orders", rows: [{ id: 1 }] });
+    expect(postMock).toHaveBeenCalledOnce();
+  });
+
   it("preserves resource search name casing for backend requests", async () => {
     getMock.mockResolvedValue({ data: { entries: [], total_count: 0 } });
     const { queryObjectTypeResources } = await import(

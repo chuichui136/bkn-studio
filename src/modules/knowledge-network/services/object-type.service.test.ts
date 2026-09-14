@@ -90,6 +90,46 @@ describe("object-type.service · getObjectTypeSampleData", () => {
       ],
     });
   });
+
+  it("loads every object type page for permission enrichment", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      id: `object-${index}`,
+      name: `Object ${index}`,
+      operations: ["view_detail"],
+    }));
+    getMock
+      .mockResolvedValueOnce({ data: { entries: firstPage, total_count: 101 } })
+      .mockResolvedValueOnce({
+        data: {
+          entries: [{ id: "object-100", name: "Object 100", operations: ["query_data"] }],
+          total_count: 101,
+        },
+      });
+    const { listKnowledgeNetworkObjectTypes } = await import(
+      "@/modules/knowledge-network/services/object-type.service"
+    );
+
+    const result = await listKnowledgeNetworkObjectTypes("kn-1", {
+      allPages: true,
+      skipErrorToast: true,
+    });
+
+    expect(result).toHaveLength(101);
+    expect(result.at(-1)).toMatchObject({ id: "object-100", operations: ["query_data"] });
+    expect(getMock).toHaveBeenNthCalledWith(
+      2,
+      "/bkn-backend/v1/knowledge-networks/kn-1/object-types",
+      {
+        params: {
+          direction: "desc",
+          limit: 100,
+          offset: 100,
+          sort: "update_time",
+        },
+        skipErrorToast: true,
+      },
+    );
+  });
 });
 
 describe("object-type.service · validateKnowledgeNetworkObjectType", () => {

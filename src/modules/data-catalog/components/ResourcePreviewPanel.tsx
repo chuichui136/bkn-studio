@@ -180,7 +180,8 @@ export function ResourcePreviewPanel({
   const resourceMissing = queryBlockReason === "missing";
   const resourceStale = queryBlockReason === "stale";
   const previewUnavailable = queryBlockReason !== null;
-  const canQueryData = hasCatalogResourceOperation(resource, "query_data");
+  const canQueryData = resource.operations === undefined
+    || hasCatalogResourceOperation(resource, "query_data");
   const hasLocalIndex = resource.category === "table" &&
     resource.localIndexStatus === "available" &&
     Boolean(resource.localIndexName);

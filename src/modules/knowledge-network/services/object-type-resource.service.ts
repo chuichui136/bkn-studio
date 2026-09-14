@@ -269,7 +269,7 @@ export async function queryObjectTypeResources(
       dataSourceId: item.catalog_id,
       id: item.id,
       name: item.name ?? item.id,
-      operations: item.operations ?? [],
+      operations: item.operations,
     })),
     total: response.data.total_count ?? 0,
   };
@@ -310,7 +310,9 @@ export async function getObjectTypeResourcePreview(
   }
 
   const fields = (detail.schema_definition ?? []).map(mapResourceField);
-  const canQueryData = detail.operations?.includes("*") || detail.operations?.includes("query_data");
+  const canQueryData = detail.operations === undefined
+    || detail.operations.includes("*")
+    || detail.operations.includes("query_data");
 
   if (!canQueryData) {
     return {

@@ -241,6 +241,22 @@ describe("resource.service · listCatalogResourcePage", () => {
     });
     expect(result.items[0]?.updateTime).not.toBe("");
   });
+
+  it("preserves unknown operations for backend authorization fallback", async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: [{ catalog_id: "cat-1", id: "res-1", name: "orders", update_time: 123 }],
+        total_count: 1,
+      },
+    });
+    const { listCatalogResourcePage } = await import(
+      "@/modules/data-catalog/services/resource.service"
+    );
+
+    const result = await listCatalogResourcePage({ catalogId: "cat-1", limit: 10, offset: 0 });
+
+    expect(result.items[0]?.operations).toBeUndefined();
+  });
 });
 
 describe("resource.service · discovery and enabled actions", () => {

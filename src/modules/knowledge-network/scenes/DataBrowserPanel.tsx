@@ -342,14 +342,17 @@ export function DataBrowserPanel({
       (turn) => fetchKnDetail(env, auth, controller.signal, turn ?? undefined),
     );
     const permissionPromise = permissionNetworkId
-      ? listKnowledgeNetworkObjectTypes(permissionNetworkId, { skipErrorToast: true }).catch(() => null)
+      ? listKnowledgeNetworkObjectTypes(permissionNetworkId, {
+          allPages: true,
+          skipErrorToast: true,
+        }).catch(() => null)
       : Promise.resolve(null);
 
     void Promise.all([detailPromise, permissionPromise])
       .then(([data, permissionRecords]) => {
         if (!cancelled) {
           const operationsById = new Map(
-            (permissionRecords ?? []).map((record) => [record.id, record.operations ?? []]),
+            (permissionRecords ?? []).map((record) => [record.id, record.operations]),
           );
           setDetail({
             ...data,

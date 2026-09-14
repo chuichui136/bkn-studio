@@ -505,4 +505,28 @@ describe("ResourcePreviewPanel", () => {
     expect(screen.getByText("dataCatalog.preview.noQueryPermission")).toBeTruthy();
     expect(previewCatalogResourceMock).not.toHaveBeenCalled();
   });
+
+  it("keeps backend authorization as the fallback when resource operations are unavailable", async () => {
+    previewCatalogResourceMock.mockResolvedValue({ rows: [], total: 0 });
+
+    render(
+      <ResourcePreviewPanel
+        active
+        resource={{
+          ...resource,
+          columnCount: 1,
+          operations: undefined,
+          schema: [{ name: "id", type: "integer" }],
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(previewCatalogResourceMock).toHaveBeenCalledWith("resource-1", {
+        limit: 10,
+        offset: 0,
+      });
+    });
+    expect(screen.queryByText("dataCatalog.preview.noQueryPermission")).toBeNull();
+  });
 });
