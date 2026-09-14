@@ -1199,6 +1199,8 @@ export type KnObjectType = {
   id: string;
   name?: string;
   comment?: string;
+  /** Effective record operations, enriched by Studio when bkn-backend access data is available. */
+  operations?: string[];
   data_source?: KnDataSource | null;
   data_properties?: KnDataProperty[] | null;
   related_metrics?: KnRelatedMetric[];

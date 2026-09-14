@@ -774,6 +774,7 @@ export async function queryKnowledgeNetworkMetricData(
         params: {
           fill_null: params.fillNull,
         },
+        skipErrorToast: true,
       },
     );
 

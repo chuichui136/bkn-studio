@@ -29,7 +29,7 @@ describe("object-type-resource.service", () => {
   it("uses Vega paging for the object-type resource preview", async () => {
     getMock.mockResolvedValue({
       data: {
-        entries: [{ id: "r-1", name: "orders", schema_definition: [{ name: "id" }] }],
+        entries: [{ id: "r-1", name: "orders", operations: ["query_data"], schema_definition: [{ name: "id" }] }],
       },
     });
     postMock.mockResolvedValue({ data: { entries: [{ id: 1 }], total_count: 1 } });
@@ -50,10 +50,44 @@ describe("object-type-resource.service", () => {
       },
       {
         headers: { "X-HTTP-Method-Override": "GET" },
+        skipErrorToast: true,
         transformResponse: transformPrecisionSafeJSONResponse,
       },
     );
     expect(result?.rowTotalCount).toBe(1);
+  });
+
+  it("does not request preview rows when resource operations omit query_data", async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: [{ id: "r-1", name: "orders", operations: ["view_detail"], schema_definition: [{ name: "id" }] }],
+      },
+    });
+    const { getObjectTypeResourcePreview } = await import(
+      "@/modules/knowledge-network/services/object-type-resource.service"
+    );
+
+    const result = await getObjectTypeResourcePreview("kn-1", "r-1");
+
+    expect(result).toMatchObject({ name: "orders", queryDenied: true, rows: [] });
+    expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps backend authorization as the fallback when resource operations are unavailable", async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: [{ id: "r-1", name: "orders", schema_definition: [{ name: "id" }] }],
+      },
+    });
+    postMock.mockResolvedValue({ data: { entries: [{ id: 1 }], total_count: 1 } });
+    const { getObjectTypeResourcePreview } = await import(
+      "@/modules/knowledge-network/services/object-type-resource.service"
+    );
+
+    const result = await getObjectTypeResourcePreview("kn-1", "r-1");
+
+    expect(result).toMatchObject({ name: "orders", rows: [{ id: 1 }] });
+    expect(postMock).toHaveBeenCalledOnce();
   });
 
   it("preserves resource search name casing for backend requests", async () => {

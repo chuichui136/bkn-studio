@@ -131,7 +131,10 @@ async function resolveObjectTypeConceptGroups(
     .map((group) => ({ id: group.id, name: group.name }));
 }
 
-export async function listKnowledgeNetworkObjectTypes(networkId: string) {
+export async function listKnowledgeNetworkObjectTypes(
+  networkId: string,
+  options: { allPages?: boolean; skipErrorToast?: boolean } = {},
+) {
   if (useMock) {
     return wait(
       (mockObjectTypes[networkId] ?? []).map((item) => ({
@@ -141,19 +144,39 @@ export async function listKnowledgeNetworkObjectTypes(networkId: string) {
     );
   }
 
-  const response = await http.get<BackendListResponse<BackendObjectType>>(
-    `/bkn-backend/v1/knowledge-networks/${networkId}/object-types`,
-    {
-      params: {
-        direction: "desc",
-        limit: 100,
-        offset: 0,
-        sort: "update_time",
-      },
-    },
-  );
+  const pageSize = 100;
+  const entries: BackendObjectType[] = [];
+  let offset = 0;
+  let hasMore = true;
 
-  return response.data.entries.map(mapObjectType);
+  while (hasMore) {
+    const response = await http.get<BackendListResponse<BackendObjectType>>(
+      `/bkn-backend/v1/knowledge-networks/${networkId}/object-types`,
+      {
+        params: {
+          direction: "desc",
+          limit: pageSize,
+          offset,
+          sort: "update_time",
+        },
+        skipErrorToast: options.skipErrorToast,
+      },
+    );
+    const pageEntries = response.data.entries;
+    entries.push(...pageEntries);
+
+    hasMore = Boolean(
+      options.allPages
+      && pageEntries.length === pageSize
+      && entries.length < response.data.total_count
+    );
+    if (!hasMore) {
+      break;
+    }
+    offset += pageEntries.length;
+  }
+
+  return entries.map(mapObjectType);
 }
 
 export async function getKnowledgeNetworkObjectType(
@@ -229,6 +252,7 @@ export async function getObjectTypeSampleData(
         need_total: true,
         offset: 0,
       },
+      skipErrorToast: true,
       transformResponse: transformPrecisionSafeJSONResponse,
     },
   );

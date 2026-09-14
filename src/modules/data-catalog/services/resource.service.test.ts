@@ -47,6 +47,7 @@ describe("resource.service · previewCatalogResource", () => {
       },
       {
         headers: { "X-HTTP-Method-Override": "GET" },
+        skipErrorToast: true,
         transformResponse: transformPrecisionSafeJSONResponse,
       },
     );
@@ -191,6 +192,7 @@ describe("resource.service · listCatalogResourcePage", () => {
             index_name: "bkn_res-1",
             local_status: "available",
             name: "orders",
+            operations: ["view_detail", "query_data"],
             schema: "external_data",
             status: "stale",
             status_message: "discover metadata failed",
@@ -229,6 +231,7 @@ describe("resource.service · listCatalogResourcePage", () => {
         lastDiscoverStatus: "error",
         localIndexName: "bkn_res-1",
         localIndexStatus: "available",
+        operations: ["view_detail", "query_data"],
         schemaName: "external_data",
         status: "stale",
         statusMessage: "discover metadata failed",
@@ -237,6 +240,22 @@ describe("resource.service · listCatalogResourcePage", () => {
       total: 21,
     });
     expect(result.items[0]?.updateTime).not.toBe("");
+  });
+
+  it("preserves unknown operations for backend authorization fallback", async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: [{ catalog_id: "cat-1", id: "res-1", name: "orders", update_time: 123 }],
+        total_count: 1,
+      },
+    });
+    const { listCatalogResourcePage } = await import(
+      "@/modules/data-catalog/services/resource.service"
+    );
+
+    const result = await listCatalogResourcePage({ catalogId: "cat-1", limit: 10, offset: 0 });
+
+    expect(result.items[0]?.operations).toBeUndefined();
   });
 });
 
@@ -297,6 +316,7 @@ describe("resource.service · getCatalogResources", () => {
             },
             local_status: "available",
             name: "orders",
+            operations: ["view_detail", "query_data"],
           },
         ],
       },
@@ -313,6 +333,7 @@ describe("resource.service · getCatalogResources", () => {
         },
         localIndexName: "bkn_res-1",
         localIndexStatus: "available",
+        operations: ["view_detail", "query_data"],
       }),
     ]);
   });

@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import sharedStyles from "@/modules/data-catalog/components/shared.module.css";
 import type { CatalogResource } from "@/modules/data-catalog/types/data-catalog";
+import type { CatalogRecord } from "@/shared/catalog";
 
 const {
   createResourceSemanticUnderstandingTaskMock,
@@ -63,6 +64,12 @@ const resource: CatalogResource = {
   expectedUpdateTime: 0,
 };
 
+const manageableCatalog = {
+  id: "catalog-1",
+  internal: false,
+  operations: ["task_manage"],
+} as CatalogRecord;
+
 function SemanticUnderstandingTaskFormDefaultsHarness({ form, open }: {
   form: Pick<FormInstance, "setFieldsValue">;
   open: boolean;
@@ -91,10 +98,24 @@ describe("ResourceSemanticUnderstandingPanel", () => {
   });
 
   it("shows the empty-state title only once when there are no tasks", async () => {
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
 
     await waitFor(() => expect(listSemanticUnderstandingTasksMock).toHaveBeenCalled());
     expect(screen.getAllByText("dataCatalog.semanticWorkspace.empty")).toHaveLength(1);
+  });
+
+  it("hides task mutations when the current catalog omits task_manage", async () => {
+    render(
+      <ResourceSemanticUnderstandingPanel
+        active
+        catalog={{ ...manageableCatalog, operations: ["view_detail"] }}
+        resource={resource}
+      />,
+    );
+
+    await waitFor(() => expect(listSemanticUnderstandingTasksMock).toHaveBeenCalled());
+    expect(screen.queryByText("dataCatalog.semanticWorkspace.create")).toBeNull();
+    expect(screen.queryByText("dataCatalog.task.batchDelete")).toBeNull();
   });
 
   it("resets sample rows to ten each time the creation dialog opens", () => {
@@ -113,7 +134,7 @@ describe("ResourceSemanticUnderstandingPanel", () => {
   it("initializes the semantic task defaults before opening the creation dialog", async () => {
     createResourceSemanticUnderstandingTaskMock.mockResolvedValue({ id: "task-1" });
 
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
 
     fireEvent.click(screen.getByRole("button", { name: /dataCatalog\.semanticWorkspace\.create/ }));
 
@@ -137,7 +158,7 @@ describe("ResourceSemanticUnderstandingPanel", () => {
   it("lets users choose up to twenty sample rows", async () => {
     createResourceSemanticUnderstandingTaskMock.mockResolvedValue({ id: "task-1" });
 
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
 
     fireEvent.click(screen.getByRole("button", { name: /dataCatalog\.semanticWorkspace\.create/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: "dataCatalog.semanticWorkspace.includeSamples" }));
@@ -157,7 +178,7 @@ describe("ResourceSemanticUnderstandingPanel", () => {
   }, 20_000);
 
   it("rejects manually entered out-of-range sample rows", async () => {
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
 
     fireEvent.click(screen.getByRole("button", { name: /dataCatalog\.semanticWorkspace\.create/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: "dataCatalog.semanticWorkspace.includeSamples" }));
@@ -170,7 +191,7 @@ describe("ResourceSemanticUnderstandingPanel", () => {
   }, 20_000);
 
   it("keeps table header filters available when no task matches", async () => {
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
 
     await waitFor(() => expect(listSemanticUnderstandingTasksMock).toHaveBeenCalled());
     const calls = listSemanticUnderstandingTasksMock.mock.calls as unknown as Array<
@@ -198,7 +219,7 @@ describe("ResourceSemanticUnderstandingPanel", () => {
       status: "completed",
     }], total: 1 });
 
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
 
     await screen.findByText("semantic-task-1");
     const finishTime = screen.getByText("dataCatalog.task.finishedAt");
@@ -231,7 +252,7 @@ describe("ResourceSemanticUnderstandingPanel", () => {
       items: tasks.slice(window.offset, window.offset + window.limit), total: tasks.length,
     }));
 
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
 
     await screen.findByText("semantic-task-1");
     expect(screen.queryByText("semantic-task-11")).toBeNull();
@@ -275,7 +296,7 @@ describe("ResourceSemanticUnderstandingPanel", () => {
       return Promise.resolve({ items: [], total: 20 });
     });
 
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
 
     await waitFor(() => expect(listSemanticUnderstandingTasksMock).toHaveBeenCalledWith(
       expect.objectContaining({ applied: true, resourceId: resource.id, statuses: ["completed"] }),
@@ -290,7 +311,7 @@ describe("ResourceSemanticUnderstandingPanel", () => {
       return Promise.resolve({ items: [], total: 0 });
     });
 
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
 
     expect(await screen.findByText("Summary unavailable")).toBeTruthy();
     expect(screen.queryByText("dataCatalog.semanticWorkspace.noResult")).toBeNull();
@@ -316,7 +337,7 @@ describe("ResourceSemanticUnderstandingPanel", () => {
     }));
     createResourceSemanticUnderstandingTaskMock.mockResolvedValue({ id: "new-task" });
 
-    render(<ResourceSemanticUnderstandingPanel active resource={resource} />);
+    render(<ResourceSemanticUnderstandingPanel active catalog={manageableCatalog} resource={resource} />);
     await screen.findByText("semantic-task-1");
     fireEvent.click(screen.getByTitle("2"));
     await screen.findByText("semantic-task-11");

@@ -24,6 +24,7 @@ import type {
   ResourcePreviewResult,
   ResourceSchemaField,
 } from "@/modules/data-catalog/types/data-catalog";
+import { hasCatalogResourceOperation } from "@/modules/data-catalog/utils/resource-operations";
 
 import styles from "./ResourcePreviewPanel.module.css";
 
@@ -179,6 +180,8 @@ export function ResourcePreviewPanel({
   const resourceMissing = queryBlockReason === "missing";
   const resourceStale = queryBlockReason === "stale";
   const previewUnavailable = queryBlockReason !== null;
+  const canQueryData = resource.operations === undefined
+    || hasCatalogResourceOperation(resource, "query_data");
   const hasLocalIndex = resource.category === "table" &&
     resource.localIndexStatus === "available" &&
     Boolean(resource.localIndexName);
@@ -223,7 +226,7 @@ export function ResourcePreviewPanel({
   );
 
   useEffect(() => {
-    if (!active || disabled || previewUnavailable) {
+    if (!active || disabled || previewUnavailable || !canQueryData) {
       requestVersionRef.current += 1;
       return;
     }
@@ -233,7 +236,7 @@ export function ResourcePreviewPanel({
     return () => {
       requestVersionRef.current += 1;
     };
-  }, [active, disabled, load, previewUnavailable, resource.id]);
+  }, [active, canQueryData, disabled, load, previewUnavailable, resource.id]);
 
   const offset = (page - 1) * pageSize;
 
@@ -274,6 +277,17 @@ export function ResourcePreviewPanel({
         )}
         showIcon
         type="error"
+      />
+    );
+  }
+
+  if (!canQueryData) {
+    return (
+      <Alert
+        description={t("dataCatalog.preview.noQueryPermissionDescription")}
+        message={t("dataCatalog.preview.noQueryPermission")}
+        showIcon
+        type="info"
       />
     );
   }

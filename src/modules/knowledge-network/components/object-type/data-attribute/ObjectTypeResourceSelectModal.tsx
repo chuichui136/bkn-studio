@@ -12,12 +12,13 @@ import {
   DownOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { Button, Checkbox, Dropdown, Empty, Input, Modal, Pagination, Splitter, Table } from "antd";
+import { Alert, Button, Checkbox, Dropdown, Empty, Input, Modal, Pagination, Splitter, Table } from "antd";
 import type { DataNode } from "antd/es/tree";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { BusinessTree } from "@/framework/ui/common/BusinessTreePanel";
+import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import {
   getObjectTypeResourcePreview,
   listObjectTypeResourceGroups,
@@ -76,6 +77,7 @@ export function ObjectTypeResourceSelectModal({
   const [checkedItem, setCheckedItem] = useState<ObjectTypeDataSource | null>(null);
   const [previewId, setPreviewId] = useState("");
   const [preview, setPreview] = useState<ObjectTypeResourcePreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [listItems, setListItems] = useState<ObjectTypeDataSource[]>([]);
   const [listTotal, setListTotal] = useState(0);
@@ -184,9 +186,13 @@ export function ObjectTypeResourceSelectModal({
     }
 
     setPreviewLoading(true);
+    setPreviewError(null);
     try {
       const nextPreview = await getObjectTypeResourcePreview(networkId, resourceId);
       setPreview(nextPreview);
+    } catch (error) {
+      setPreview(null);
+      setPreviewError(extractRequestErrorMessage(error));
     } finally {
       setPreviewLoading(false);
     }
@@ -218,6 +224,7 @@ export function ObjectTypeResourceSelectModal({
     setCheckedItem(null);
     setPreviewId("");
     setPreview(null);
+    setPreviewError(null);
     setSearchValue("");
     setDebouncedSearchValue("");
     setSelectedGroupId("");
@@ -452,7 +459,16 @@ export function ObjectTypeResourceSelectModal({
         </Splitter.Panel>
 
         <Splitter.Panel className={styles.panelBox}>
-          {preview ? (
+          {previewError ? (
+            <Alert message={previewError} showIcon type="error" />
+          ) : preview?.queryDenied ? (
+            <Alert
+              description={t("knowledgeNetwork.objectTypeProxyReadForbiddenDescription")}
+              message={t("knowledgeNetwork.objectTypeProxyReadForbidden")}
+              showIcon
+              type="warning"
+            />
+          ) : preview ? (
             <div className={styles.previewContainer}>
               <div className={styles.previewTitle}>
                 <span>{preview.name}</span>

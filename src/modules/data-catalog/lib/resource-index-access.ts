@@ -6,7 +6,7 @@
  */
 
 import type { CatalogResource } from "@/modules/data-catalog/types/data-catalog";
-import type { CatalogRecord } from "@/shared/catalog";
+import { hasCatalogOperation, type CatalogRecord } from "@/shared/catalog";
 
 export function isResourceIndexReadOnly(
   catalog: CatalogRecord | null,
@@ -19,7 +19,9 @@ export function canManageResourceBuildTasks(
   resource: CatalogResource,
   catalog: CatalogRecord | null,
 ) {
-  return resource.category !== "dataset" && !isResourceIndexReadOnly(catalog);
+  return resource.category !== "dataset"
+    && !isResourceIndexReadOnly(catalog)
+    && hasCatalogOperation(catalog, "task_manage");
 }
 
 export function canViewResourceIndexTasks(resource: CatalogResource) {

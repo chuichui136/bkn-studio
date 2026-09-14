@@ -19,8 +19,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { useAppServices } from "@/framework/context/use-app-services";
-import { hasPermissions } from "@/framework/permission/has-permissions";
-import { PermissionGate } from "@/framework/permission/PermissionGate";
 import { formatDateTimeYmdHms } from "@/framework/i18n/format";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
@@ -181,7 +179,7 @@ export function ResourceIndexPanel({
   tasks,
 }: ResourceIndexPanelProps) {
   const { i18n, t } = useTranslation();
-  const { message, modal, runtimeConfig } = useAppServices();
+  const { message, modal } = useAppServices();
   const navigate = useNavigate();
   const [taskPage, setTaskPage] = useState(1);
   const [taskPageSize, setTaskPageSize] = useState(10);
@@ -258,12 +256,7 @@ export function ResourceIndexPanel({
   });
   const readOnly = isResourceIndexReadOnly(catalog, canModifyResource);
   const canManageBuildTasks = canManageResourceBuildTasks(resource, catalog);
-  const canManageTaskActions =
-    canManageBuildTasks &&
-    hasPermissions({
-      currentPermissions: runtimeConfig.currentUser.permissions,
-      requiredPermissions: "catalog:task_manage",
-    });
+  const canManageTaskActions = canManageBuildTasks;
   const latest = state.latest;
   const activeTask = latest && CONTROLLABLE_TASK_STATUSES.has(latest.status) ? latest : null;
   const progressSource = progressTask(latest);
@@ -585,37 +578,31 @@ export function ResourceIndexPanel({
             {canManageBuildTasks && activeTask &&
               (activeTask.status === "running" ||
                 activeTask.status === "pending") ? (
-              <PermissionGate permissions="catalog:task_manage">
-                <AppButton onClick={() => void pauseOrResume(activeTask)} size="small">
-                  {pauseResumeLabel}
-                </AppButton>
-              </PermissionGate>
+              <AppButton onClick={() => void pauseOrResume(activeTask)} size="small">
+                {pauseResumeLabel}
+              </AppButton>
             ) : null}
             {canManageBuildTasks && activeTask?.status === "stopped" ? (
-              <PermissionGate permissions="catalog:task_manage">
-                <AppButton
-                  disabled={buildActionsDisabled}
-                  onClick={() => void pauseOrResume(activeTask)}
-                  size="small"
-                >
-                  {pauseResumeLabel}
-                </AppButton>
-              </PermissionGate>
+              <AppButton
+                disabled={buildActionsDisabled}
+                onClick={() => void pauseOrResume(activeTask)}
+                size="small"
+              >
+                {pauseResumeLabel}
+              </AppButton>
             ) : null}
             {canManageBuildTasks && latest?.status === "failed" ? (
-              <PermissionGate permissions="catalog:task_manage">
-                <AppButton
-                  disabled={buildActionsDisabled}
-                  onClick={() => {
-                    if (latest) {
-                      void retry(latest);
-                    }
-                  }}
-                  size="small"
-                >
-                  {t("dataCatalog.task.rerun")}
-                </AppButton>
-              </PermissionGate>
+              <AppButton
+                disabled={buildActionsDisabled}
+                onClick={() => {
+                  if (latest) {
+                    void retry(latest);
+                  }
+                }}
+                size="small"
+              >
+                {t("dataCatalog.task.rerun")}
+              </AppButton>
             ) : null}
           </div>
         </div>
@@ -646,20 +633,18 @@ export function ResourceIndexPanel({
                 {t("dataCatalog.indexWorkspace.launchTitle")}
               </h3>
             </div>
-            <PermissionGate permissions="catalog:task_manage">
-              <BuildTaskLaunchPanel
-                active={active && indexView === "tasks"}
-                disabled={buildActionsDisabled}
-                onGoConfigure={() => onIndexViewChange("config")}
-                onStarted={() => {
-                  setSelectedKeys([]);
-                  setTaskPage(1);
-                  void onRefresh();
-                  void loadHistory(1, taskPageSize);
-                }}
-                resource={resource}
-              />
-            </PermissionGate>
+            <BuildTaskLaunchPanel
+              active={active && indexView === "tasks"}
+              disabled={buildActionsDisabled}
+              onGoConfigure={() => onIndexViewChange("config")}
+              onStarted={() => {
+                setSelectedKeys([]);
+                setTaskPage(1);
+                void onRefresh();
+                void loadHistory(1, taskPageSize);
+              }}
+              resource={resource}
+            />
           </div>
         ) : null}
       </div>
@@ -677,7 +662,7 @@ export function ResourceIndexPanel({
               <AppButton icon={<ReloadOutlined />} onClick={() => void refreshTasks()}>
                 {t("common.refresh")}
               </AppButton>
-              <PermissionGate permissions="catalog:task_manage">
+              {canManageTaskActions ? (
                 <AppButton
                   danger
                   disabled={batchDeleteTargets.length === 0}
@@ -688,7 +673,7 @@ export function ResourceIndexPanel({
                     ? `${t("dataCatalog.task.batchDelete")} (${batchDeleteTargets.length})`
                     : t("dataCatalog.task.batchDelete")}
                 </AppButton>
-              </PermissionGate>
+              ) : null}
             </Space>
           </div>
         </div>

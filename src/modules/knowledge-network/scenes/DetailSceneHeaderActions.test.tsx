@@ -268,6 +268,37 @@ describe("knowledge network detail scene headers", () => {
     });
   });
 
+  it("does not request sample rows when object type operations omit query_data", async () => {
+    mocks.routeParams.current = { networkId: "network-1", objectTypeId: "object-1" };
+    mocks.searchParams.current = "tab=data";
+    mocks.getKnowledgeNetworkObjectTypeDetail.mockResolvedValue({
+      color: "#126ee3",
+      conceptGroupIds: [],
+      conceptGroupNames: [],
+      dataProperties: [{ displayName: "Order ID", name: "order_id", type: "string" }],
+      dataSource: { id: "resource-1", name: "Orders", type: "resource" },
+      description: "Object description",
+      displayKey: "",
+      hasIndex: false,
+      id: "object-1",
+      incrementalKey: "",
+      logicProperties: [],
+      name: "Order",
+      operations: ["view_detail"],
+      primaryKeys: [],
+      tags: [],
+      updateTime: "2026-08-20 16:09:36",
+      updaterName: "admin",
+    });
+
+    render(<ObjectTypeDetailScene />);
+
+    expect(
+      await screen.findByText("knowledgeNetwork.objectTypeProxyReadForbidden"),
+    ).not.toBeNull();
+    expect(mocks.getObjectTypeSampleData).not.toHaveBeenCalled();
+  });
+
   it("shows a readable backend description for an unknown sample-data failure", async () => {
     mocks.routeParams.current = { networkId: "network-1", objectTypeId: "object-1" };
     mocks.searchParams.current = "tab=data";

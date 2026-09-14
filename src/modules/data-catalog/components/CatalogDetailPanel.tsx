@@ -16,7 +16,6 @@ import { useAppServices } from "@/framework/context/use-app-services";
 import { CAPABILITIES } from "@/framework/entitlement/capabilities";
 import { EditionBadge } from "@/framework/entitlement/EditionBadge";
 import { hasPermissions } from "@/framework/permission/has-permissions";
-import { PermissionGate } from "@/framework/permission/PermissionGate";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { AppTable } from "@/framework/ui/common/AppTable";
@@ -135,10 +134,8 @@ export function CatalogDetailPanel({
   const resizingRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const physical = isCatalogPhysical(catalog);
-  const canManageResourceTasks = hasPermissions({
-    currentPermissions: runtimeConfig.currentUser.permissions,
-    requiredPermissions: "catalog:task_manage",
-  });
+  const canManageResourceTasks = hasCatalogOperation(catalog, "task_manage");
+  const canManageResources = hasCatalogOperation(catalog, "resource_manage");
   const hasResourceQuery =
     resourceKeyword.trim().length > 0 ||
     categoryFilter.length > 0;
@@ -459,12 +456,10 @@ export function CatalogDetailPanel({
       {showOperationBar ? <div className={styles.operationBar}>
         <div className={styles.operationPrimary}>
           <div className={styles.toolbarActions}>
-            {dataCatalogCreationAvailable && !physical && !catalog.internal ? (
-              <PermissionGate permissions="catalog:resource_manage">
+            {dataCatalogCreationAvailable && !physical && !catalog.internal && canManageResources ? (
                 <AppButton onClick={() => onCreateResource(catalog.id)} type="primary">
                   {t("dataCatalog.resource.create")}
                 </AppButton>
-              </PermissionGate>
             ) : null}
             {/*
               授权在抽屉里当场做完,走 /me/object-grants 自助面。原先这里跳系统管理的对象授权页,
@@ -540,12 +535,10 @@ export function CatalogDetailPanel({
                   {t("dataCatalog.catalog.goDiscoverToDiscover")}
                 </AppButton>
               ) : !physical && !catalog.internal ? (
-                dataCatalogCreationAvailable ? (
-                  <PermissionGate permissions="catalog:resource_manage">
+                dataCatalogCreationAvailable && canManageResources ? (
                     <AppButton onClick={() => onCreateResource(catalog.id)} type="primary">
                       {t("dataCatalog.resource.create")}
                     </AppButton>
-                  </PermissionGate>
                 ) : null
               ) : null
             }

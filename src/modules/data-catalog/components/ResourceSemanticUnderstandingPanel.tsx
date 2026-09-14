@@ -17,9 +17,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useAppServices } from "@/framework/context/use-app-services";
-import { hasPermissions } from "@/framework/permission/has-permissions";
 import { formatDateTimeYmdHms } from "@/framework/i18n/format";
-import { PermissionGate } from "@/framework/permission/PermissionGate";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { AppTable } from "@/framework/ui/common/AppTable";
@@ -30,6 +28,7 @@ import { SemanticUnderstandingTaskDetailDrawer } from "@/modules/data-catalog/co
 import { SemanticTaskAppliedTag, SemanticTaskStatusTag } from "@/modules/data-catalog/components/SemanticTaskPresentation";
 import { createResourceSemanticUnderstandingTask, deleteSemanticUnderstandingTask, listSemanticUnderstandingTasks, type CreateSemanticUnderstandingTaskPayload, type SemanticUnderstandingTaskSummary } from "@/modules/data-catalog/services/semantic-understanding-task.service";
 import type { CatalogResource } from "@/modules/data-catalog/types/data-catalog";
+import { hasCatalogOperation, type CatalogRecord } from "@/shared/catalog";
 
 import styles from "./ResourceSemanticUnderstandingPanel.module.css";
 import { useSemanticUnderstandingTaskFormDefaults } from "./semantic-understanding-task-form";
@@ -47,9 +46,17 @@ function formatTime(value: number) {
   return formatDateTimeYmdHms(value < 100_000_000_000 ? value * 1000 : value);
 }
 
-export function ResourceSemanticUnderstandingPanel({ active, resource }: { active: boolean; resource: CatalogResource }) {
+export function ResourceSemanticUnderstandingPanel({
+  active,
+  catalog,
+  resource,
+}: {
+  active: boolean;
+  catalog: CatalogRecord | null;
+  resource: CatalogResource;
+}) {
   const { t } = useTranslation();
-  const { message, modal, runtimeConfig } = useAppServices();
+  const { message, modal } = useAppServices();
   const [form] = Form.useForm<CreateSemanticUnderstandingTaskPayload>();
   const includeSampleRows = Form.useWatch("includeSampleRows", form) ?? false;
   const [tasks, setTasks] = useState<SemanticUnderstandingTaskSummary[]>([]);
@@ -74,10 +81,7 @@ export function ResourceSemanticUnderstandingPanel({ active, resource }: { activ
   const pageRequestIdRef = useRef(0);
   const summaryRequestIdRef = useRef(0);
   const resourceChanged = filtersResourceId !== resource.id;
-  const canManageTasks = hasPermissions({
-    currentPermissions: runtimeConfig.currentUser.permissions,
-    requiredPermissions: "catalog:task_manage",
-  });
+  const canManageTasks = hasCatalogOperation(catalog, "task_manage");
 
   const loadPage = useCallback(async (targetPage: number, targetPageSize: number) => {
     const requestId = ++pageRequestIdRef.current;
@@ -331,17 +335,17 @@ export function ResourceSemanticUnderstandingPanel({ active, resource }: { activ
         </strong>
       </div>
       <Space>
-        <PermissionGate permissions="catalog:task_manage">
+        {canManageTasks ? (
           <AppButton icon={<PlusOutlined />} type="primary" onClick={() => setOpen(true)}>
             {t("dataCatalog.semanticWorkspace.create")}
           </AppButton>
-        </PermissionGate>
+        ) : null}
         <AppButton icon={<ReloadOutlined />} onClick={() => void Promise.all([loadPage(page, pageSize), loadSummary()])}>{t("common.refresh")}</AppButton>
-        <PermissionGate permissions="catalog:task_manage">
+        {canManageTasks ? (
           <AppButton danger disabled={batchDeleteTargets.length === 0} icon={<DeleteOutlined />} onClick={handleBatchDelete}>
             {batchDeleteTargets.length > 0 ? `${t("dataCatalog.task.batchDelete")} (${batchDeleteTargets.length})` : t("dataCatalog.task.batchDelete")}
           </AppButton>
-        </PermissionGate>
+        ) : null}
       </Space>
     </section>
     {error ? <Alert message={error} showIcon type="error" /> : <TableSurface>
