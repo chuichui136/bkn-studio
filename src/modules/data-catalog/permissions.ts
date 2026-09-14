@@ -11,5 +11,8 @@ export const dataCatalogResourceStatusPermissions = [
   "catalog:task_manage",
 ] as const;
 
+/** Permission that allows a caller to change resources belonging to a catalog. */
+export const dataCatalogResourceManagePermission = "catalog:resource_manage" as const;
+
 /** Permissions that allow the caller to open a catalog detail. */
 export const catalogDetailPermissions = ["catalog:view_detail", "resource:view_detail"];

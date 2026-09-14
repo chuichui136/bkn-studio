@@ -158,7 +158,7 @@ describe("ResourceIndexPanel", () => {
     listBuildTaskPageMock.mockResolvedValue({ items: [], total: 0 });
   });
 
-  it("renders index configuration read-only without resource modify permission", () => {
+  it("renders index configuration read-only without catalog resource management permission", () => {
     render(
       <MemoryRouter>
         <ResourceIndexPanel
@@ -181,8 +181,8 @@ describe("ResourceIndexPanel", () => {
     }));
   });
 
-  it("keeps index configuration editable with resource modify permission", () => {
-    permissionsMock.push("resource:modify");
+  it("keeps index configuration editable with catalog resource management permission", () => {
+    permissionsMock.push("catalog:resource_manage");
     render(
       <MemoryRouter>
         <ResourceIndexPanel

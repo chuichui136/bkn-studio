@@ -33,6 +33,7 @@ import { BuildTaskDetailDrawer } from "@/modules/data-catalog/components/BuildTa
 import { BuildTaskLaunchPanel } from "@/modules/data-catalog/components/BuildTaskLaunchPanel";
 import { IndexConfigFormPanel } from "@/modules/data-catalog/components/IndexConfigFormPanel";
 import { useBuildTaskActions } from "@/modules/data-catalog/hooks/use-build-task-actions";
+import { dataCatalogResourceManagePermission } from "@/modules/data-catalog/permissions";
 import { deleteBuildTask, listBuildTaskPage } from "@/modules/data-catalog/services/build-task.service";
 import { summarizeBuildTaskError } from "@/modules/data-catalog/lib/build-task-error";
 import type { ResourceIndexView } from "@/modules/data-catalog/lib/index-build-filters";
@@ -253,7 +254,7 @@ export function ResourceIndexPanel({
   const buildActionsDisabled = !gate.ok || resourceBlockReason !== null;
   const canModifyResource = hasPermissions({
     currentPermissions: runtimeConfig.currentUser.permissions,
-    requiredPermissions: "resource:modify",
+    requiredPermissions: dataCatalogResourceManagePermission,
   });
   const readOnly = isResourceIndexReadOnly(catalog, canModifyResource);
   const canManageBuildTasks = canManageResourceBuildTasks(resource, catalog);

@@ -23,7 +23,7 @@ describe("resource index access", () => {
     expect(isResourceIndexReadOnly(catalog(true))).toBe(true);
     expect(isResourceIndexReadOnly(catalog(false))).toBe(false);
   });
-  it("keeps resources read-only without resource modify permission", () => {
+  it("keeps resources read-only without catalog resource management permission", () => {
     expect(isResourceIndexReadOnly(catalog(false), false)).toBe(true);
     expect(isResourceIndexReadOnly(catalog(false), true)).toBe(false);
   });
