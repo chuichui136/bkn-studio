@@ -8,8 +8,11 @@
 import type { CatalogResource } from "@/modules/data-catalog/types/data-catalog";
 import type { CatalogRecord } from "@/shared/catalog";
 
-export function isResourceIndexReadOnly(catalog: CatalogRecord | null) {
-  return Boolean(catalog?.internal);
+export function isResourceIndexReadOnly(
+  catalog: CatalogRecord | null,
+  canModifyResource = true,
+) {
+  return Boolean(catalog?.internal) || !canModifyResource;
 }
 
 export function canManageResourceBuildTasks(
