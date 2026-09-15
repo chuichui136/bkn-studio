@@ -55,7 +55,7 @@ describe("ExecutionUnitCardMenu lifecycle actions", () => {
     render(
       <ExecutionUnitCardMenu
         activeTab="toolbox"
-        item={buildItem("published")}
+        item={buildItem("published", ["unpublish"])}
         onAction={onAction}
       />,
     );
@@ -75,7 +75,7 @@ describe("ExecutionUnitCardMenu lifecycle actions", () => {
     render(
       <ExecutionUnitCardMenu
         activeTab="toolbox"
-        item={buildItem("offline")}
+        item={buildItem("offline", ["publish"])}
         onAction={onAction}
       />,
     );
@@ -92,7 +92,7 @@ describe("ExecutionUnitCardMenu lifecycle actions", () => {
     render(
       <ExecutionUnitCardMenu
         activeTab="toolbox"
-        item={buildItem("unpublish")}
+        item={buildItem("unpublish", ["publish"])}
         onAction={onAction}
       />,
     );
@@ -132,5 +132,108 @@ describe("ExecutionUnitCardMenu lifecycle actions", () => {
       "authorize",
       expect.objectContaining({ operations: ["authorize"] }),
     );
+  });
+});
+
+describe("ExecutionUnitCardMenu record permissions", () => {
+  it.each(["operator", "toolbox", "mcp", "skill"] as const)(
+    "does not expose write actions for a view-only %s record",
+    (activeTab) => {
+      render(
+        <ExecutionUnitCardMenu
+          activeTab={activeTab}
+          item={buildItem("unpublish", ["view"])}
+          onAction={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "executionFactory.cardMenu.more" }));
+      const menu = within(screen.getByRole("menu"));
+
+      expect(menu.queryByText("executionFactory.cardMenu.edit")).toBeNull();
+      expect(menu.queryByText("executionFactory.publish")).toBeNull();
+      expect(menu.queryByText("common.delete")).toBeNull();
+      expect(menu.queryByText("executionFactory.cardMenu.updatePackage")).toBeNull();
+    },
+  );
+
+  it.each([
+    { description: "view-detail", operations: ["view_detail"] },
+    { description: "missing", operations: undefined },
+  ])("does not expose write actions when toolbox operations are $description", ({ operations }) => {
+    render(
+      <ExecutionUnitCardMenu
+        activeTab="toolbox"
+        item={buildItem("unpublish", operations)}
+        onAction={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "executionFactory.cardMenu.more" }));
+    const menu = within(screen.getByRole("menu"));
+    expect(menu.queryByText("executionFactory.cardMenu.edit")).toBeNull();
+    expect(menu.queryByText("executionFactory.publish")).toBeNull();
+    expect(menu.queryByText("common.delete")).toBeNull();
+  });
+
+  it.each([
+    {
+      allowed: "executionFactory.cardMenu.edit",
+      denied: ["executionFactory.publish", "common.delete"],
+      operations: ["modify"],
+      status: "unpublish",
+    },
+    {
+      allowed: "executionFactory.publish",
+      denied: ["executionFactory.cardMenu.edit", "common.delete"],
+      operations: ["publish"],
+      status: "unpublish",
+    },
+    {
+      allowed: "executionFactory.offline",
+      denied: ["executionFactory.cardMenu.edit", "common.delete"],
+      operations: ["unpublish"],
+      status: "published",
+    },
+    {
+      allowed: "common.delete",
+      denied: ["executionFactory.cardMenu.edit", "executionFactory.offline"],
+      operations: ["delete"],
+      status: "published",
+    },
+  ])(
+    "exposes $allowed only when the toolbox record operation allows it",
+    ({ allowed, denied, operations, status }) => {
+      render(
+        <ExecutionUnitCardMenu
+          activeTab="toolbox"
+          item={buildItem(status, operations)}
+          onAction={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "executionFactory.cardMenu.more" }));
+      const menu = within(screen.getByRole("menu"));
+      expect(menu.getByText(allowed)).toBeTruthy();
+      denied.forEach((label) => {
+        expect(menu.queryByText(label)).toBeNull();
+      });
+    },
+  );
+
+  it("treats a wildcard operation as every write permission", () => {
+    render(
+      <ExecutionUnitCardMenu
+        activeTab="toolbox"
+        item={buildItem("unpublish", ["*"])}
+        onAction={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "executionFactory.cardMenu.more" }));
+    const menu = within(screen.getByRole("menu"));
+    expect(menu.getByText("executionFactory.cardMenu.edit")).toBeTruthy();
+    expect(menu.getByText("executionFactory.publish")).toBeTruthy();
+    expect(menu.getByText("common.delete")).toBeTruthy();
   });
 });

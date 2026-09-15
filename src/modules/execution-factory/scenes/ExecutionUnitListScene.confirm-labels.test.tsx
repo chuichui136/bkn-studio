@@ -170,7 +170,9 @@ describe("ExecutionUnitListScene lifecycle confirmation labels (#491)", () => {
 
     it("names the MCP publish confirmation after the action instead of Save", async () => {
       api.listMcps.mockResolvedValue({
-        items: [{ mcpId: "mcp-1", name: "Weather MCP", status: "unpublish" }],
+        items: [
+          { mcpId: "mcp-1", name: "Weather MCP", operations: ["publish"], status: "unpublish" },
+        ],
         total: 1,
       });
 
@@ -185,7 +187,9 @@ describe("ExecutionUnitListScene lifecycle confirmation labels (#491)", () => {
 
     it("names the MCP unpublish confirmation after the action instead of Save", async () => {
       api.listMcps.mockResolvedValue({
-        items: [{ mcpId: "mcp-1", name: "Weather MCP", status: "published" }],
+        items: [
+          { mcpId: "mcp-1", name: "Weather MCP", operations: ["unpublish"], status: "published" },
+        ],
         total: 1,
       });
 
@@ -200,7 +204,15 @@ describe("ExecutionUnitListScene lifecycle confirmation labels (#491)", () => {
 
     it("names a clean toolbox publish Publish, and keeps Publish anyway when preflight finds issues", async () => {
       api.listToolboxes.mockResolvedValue({
-        items: [{ boxId: "box-1", metadataType: "openapi", name: "Weather Toolbox", status: "unpublish" }],
+        items: [
+          {
+            boxId: "box-1",
+            metadataType: "openapi",
+            name: "Weather Toolbox",
+            operations: ["publish"],
+            status: "unpublish",
+          },
+        ],
         total: 1,
       });
       api.listTools.mockResolvedValue({
