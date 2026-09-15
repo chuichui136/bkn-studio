@@ -43,6 +43,27 @@ function getInstallPermission() {
   return "execution-factory:catalog:install";
 }
 
+function canRunMenuAction(
+  item: ExecutionUnitCardItem,
+  action: ExecutionUnitCardAction,
+) {
+  switch (action) {
+    case "edit":
+    case "updatePackage":
+      return hasExecutionUnitRecordOperation(item, "modify");
+    case "publish":
+      return hasExecutionUnitRecordOperation(item, "publish");
+    case "offline":
+      return hasExecutionUnitRecordOperation(item, "unpublish");
+    case "delete":
+      return hasExecutionUnitRecordOperation(item, "delete");
+    case "authorize":
+      return hasExecutionUnitRecordOperation(item, "authorize");
+    default:
+      return true;
+  }
+}
+
 function pushMenuAction(
   menuItems: MenuProps["items"],
   key: string,
@@ -52,6 +73,10 @@ function pushMenuAction(
   item: ExecutionUnitCardItem,
   options?: { danger?: boolean; disabled?: boolean; disabledReason?: string },
 ) {
+  if (!canRunMenuAction(item, action)) {
+    return;
+  }
+
   menuItems?.push({
     key,
     danger: options?.danger,
@@ -228,16 +253,14 @@ export function ExecutionUnitCardMenu({
     );
   }
 
-  if (hasExecutionUnitRecordOperation(item, "authorize")) {
-    pushMenuAction(
-      menuItems,
-      "authorize",
-      t("systemAdmin.objectGrants.authorize"),
-      onAction,
-      "authorize",
-      item,
-    );
-  }
+  pushMenuAction(
+    menuItems,
+    "authorize",
+    t("systemAdmin.objectGrants.authorize"),
+    onAction,
+    "authorize",
+    item,
+  );
 
   pushMenuAction(menuItems, "delete", t("common.delete"), onAction, "delete", item, {
     danger: true,
