@@ -598,6 +598,25 @@ export function ObjectTypeAuthorizationScene() {
     }),
     [baseOps, candidateOperations],
   );
+  const normalizeCandidateOperations = (operations: string[]) => {
+    const selected = new Set(operations);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const operation of baseOps) {
+        if (!selected.has(operation.key)) {
+          continue;
+        }
+        for (const requirement of operation.requires) {
+          if (!selected.has(requirement)) {
+            selected.add(requirement);
+            changed = true;
+          }
+        }
+      }
+    }
+    return baseOps.filter((operation) => selected.has(operation.key)).map((operation) => operation.key);
+  };
 
   const isProtectedBaseGrant = (grant: ObjectGrant) =>
     (!isPlatformAuthzAdmin && isDelegateProtectedGrant(grant)) ||
@@ -608,28 +627,40 @@ export function ObjectTypeAuthorizationScene() {
     });
 
   const candidateGrant = objectGrants.find((grant) => grant.accessorId === candidateUserId);
+  // `POST /me/object-grants` replaces one professional-rule source slice. The server derives the
+  // authority source from the current grantor, so an owner must not submit an administrator's
+  // operations (and vice versa) as part of its own replacement set.
+  const candidateAuthoritySource = isAdminGrantor ? "admin_authz" : "owner_delegate";
   const candidateManagedSources = (candidateGrant?.grants ?? []).filter(
     (source) =>
       source.active &&
       !source.inherited &&
       source.effect === "allow" &&
       source.policySource === "professional_rule" &&
+      source.authoritySource === candidateAuthoritySource &&
       Boolean(source.grantId),
   );
   const candidateManagedOperations = new Set(
     candidateManagedSources.map((source) => source.operation),
   );
-  const candidateOperationsToAdd = candidateOperations.filter(
-    (operation) => !candidateManagedOperations.has(operation),
+  const candidateMissingManagedRequirements = baseOps.flatMap((operation) =>
+    candidateManagedOperations.has(operation.key)
+      ? operation.requires.flatMap((requirementKey) => {
+          if (candidateManagedOperations.has(requirementKey)) {
+            return [];
+          }
+          const requirement = baseOps.find(({ key }) => key === requirementKey);
+          return requirement ? [{ operation, requirement }] : [];
+        })
+      : [],
   );
-  const candidateSourcesToRemove = [...new Set(candidateManagedSources.map((source) => source.operation))]
-    .flatMap((operation) => {
-      const records = candidateManagedSources.filter((source) => source.operation === operation);
-      return candidateOperations.includes(operation) ? records.slice(1) : records;
-    });
+  const candidateHasDuplicateManagedOperations =
+    candidateManagedSources.length !== candidateManagedOperations.size;
   const candidateWriteLocked = candidateGrant ? isProtectedBaseGrant(candidateGrant) : false;
   const candidateHasChanges =
-    candidateOperationsToAdd.length > 0 || candidateSourcesToRemove.length > 0;
+    candidateHasDuplicateManagedOperations ||
+    candidateOperations.length !== candidateManagedOperations.size ||
+    candidateOperations.some((operation) => !candidateManagedOperations.has(operation));
 
   const selectCandidateUser = (accessorId?: string) => {
     setCandidateUserId(accessorId);
@@ -640,10 +671,11 @@ export function ObjectTypeAuthorizationScene() {
           source.active &&
           !source.inherited &&
           source.effect === "allow" &&
-          source.policySource === "professional_rule",
+          source.policySource === "professional_rule" &&
+          source.authoritySource === candidateAuthoritySource,
       )
       .map((source) => source.operation))];
-    setCandidateOperations(directOperations.length ? directOperations : grant?.operations ?? []);
+    setCandidateOperations(normalizeCandidateOperations(directOperations));
   };
 
   const toggleCandidateOperation = (operationKey: string) => {
@@ -675,20 +707,15 @@ export function ObjectTypeAuthorizationScene() {
     }
     setBaseBusy(true);
     try {
-      for (const source of candidateSourcesToRemove) {
-        await revokeObjectGrantForObject(source.grantId);
-      }
-      if (candidateOperationsToAdd.length) {
-        await upsertObjectGrantForObject({
-          accessorId: candidateUserId,
-          effect: "allow",
-          objId: objectTypeRef,
-          objName: detail.name,
-          objSub: networkId,
-          objType: "object_type",
-          operations: candidateOperationsToAdd,
-        });
-      }
+      await upsertObjectGrantForObject({
+        accessorId: candidateUserId,
+        effect: "allow",
+        objId: objectTypeRef,
+        objName: detail.name,
+        objSub: networkId,
+        objType: "object_type",
+        operations: candidateOperations,
+      });
       setCandidateUserId(undefined);
       setCandidateOperations([]);
       await loadBase();
@@ -1143,6 +1170,19 @@ export function ObjectTypeAuthorizationScene() {
             </AppButton>
           </footer>
         </div>
+        {candidateMissingManagedRequirements.length ? (
+          <div className={styles.baseGrantNotice} role="status">
+            <WarningOutlined />
+            {candidateMissingManagedRequirements.map(({ operation, requirement }) => (
+              <span key={`${operation.key}:${requirement.key}`}>
+                {t("systemAdmin.objectGrants.historicalRequiredSelectionNotice", {
+                  operation: operation.label,
+                  requirement: requirement.label,
+                })}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {candidateRequirements.length ? (
           <div className={styles.baseGrantNotice}>
             <InfoCircleOutlined />

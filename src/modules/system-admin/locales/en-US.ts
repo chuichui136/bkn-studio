@@ -254,6 +254,8 @@ export const systemAdminEnUS = {
       requiredBySelection: "This operation is required by another selection and cannot be cleared yet",
       requiredSelectionNotice:
         "{{dependents}} requires {{requirement}}, so {{requirement}} remains selected. Clear the dependent operation to unlock it.",
+      historicalRequiredSelectionNotice:
+        "The existing {{operation}} grant was missing {{requirement}}. It has been selected; save to repair the grant.",
       newGrantTitle: "Add authorization",
       grantUserLabel: "User",
       grantOperationsLabel: "Allowed operations",
