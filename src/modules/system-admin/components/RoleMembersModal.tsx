@@ -41,6 +41,20 @@ type ResolvedRoleMember = RoleMember & {
   userLookup?: "loading" | "unresolved";
 };
 
+type UserLabelLookupResult = {
+  id: string;
+  label?: string;
+};
+
+async function lookupUserLabel(id: string): Promise<UserLabelLookupResult> {
+  try {
+    const user = await getUser(id);
+    return { id, label: `${user.name}（${user.account}）` };
+  } catch {
+    return { id };
+  }
+}
+
 export function RoleMembersModal({
   departments,
   onChanged,
@@ -89,13 +103,7 @@ export function RoleMembersModal({
     }
     missing.forEach((id) => loadedUserLabelIds.current.add(id));
     const requestSeq = ++userLabelRequestSeq.current;
-    void Promise.all(
-      missing.map((id) =>
-        getUser(id)
-          .then((user) => ({ id, label: `${user.name}（${user.account}）` }))
-          .catch(() => ({ id })),
-      ),
-    ).then((results) => {
+    void Promise.all(missing.map(lookupUserLabel)).then((results) => {
       if (requestSeq !== userLabelRequestSeq.current) {
         return;
       }
