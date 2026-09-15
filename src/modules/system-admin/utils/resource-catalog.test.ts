@@ -54,28 +54,37 @@ describe("resource-catalog", () => {
     ]);
   });
 
+  it("keeps model management type-wide and links modify/delete to display", () => {
+    for (const type of ["small_model", "large_model"]) {
+      const operations = operationsForType(type);
+      expect(operations.map((operation) => operation.key)).not.toContain("execute");
+      expect(operations.find((operation) => operation.key === "modify")?.requires).toEqual(["display"]);
+      expect(operations.find((operation) => operation.key === "delete")?.requires).toEqual(["display"]);
+    }
+  });
+
   it("limits role grants to supported type-wide resource types", () => {
     const roleGrantTypes = ROLE_GRANT_RESOURCE_TYPES.map((item) => item.type);
 
     for (const type of [
       "agent",
       "agent_tpl",
+      "concept_group",
       "connector_type",
       "data_flow",
+      "action_type",
+      "metric",
+      "object_type",
+      "relation_type",
       "risk_type",
+      "safe_admin",
+      "small_model",
+      "large_model",
       "stream_data_pipeline",
     ]) {
       expect(roleGrantTypes).not.toContain(type);
     }
-    expect(roleGrantTypes).toEqual(
-      expect.arrayContaining([
-        "concept_group",
-        "object_type",
-        "relation_type",
-        "action_type",
-        "metric",
-      ]),
-    );
+    expect(roleGrantTypes).toContain("knowledge_network");
   });
 
   it("uses the corrected names for catalog and resource", async () => {

@@ -152,8 +152,8 @@ export const RESOURCE_TYPES: ResourceTypeDef[] = [
     "run_with_app",
     "display",
   ]),
-  resourceType("small_model", ["display", "create", "modify", "delete", "execute"]),
-  resourceType("large_model", ["display", "create", "modify", "delete", "execute"]),
+  resourceType("small_model", ["display", "create", "modify", "delete"]),
+  resourceType("large_model", ["display", "create", "modify", "delete"]),
   resourceType("operator", PUBLISHABLE),
   resourceType("tool_box", PUBLISHABLE),
   resourceType("skill", PUBLISHABLE),
@@ -181,16 +181,24 @@ export const RESOURCE_TYPES: ResourceTypeDef[] = [
 ];
 
 /**
- * Roles grant type-wide capabilities. Keep unsupported or object-specific resource types out of
- * the role editor without removing them from the canonical catalog: existing grants must remain
- * readable, and object authorization still uses the full resource catalog where applicable.
+ * Resource types supported by role grants. Keep unsupported types out of the role editor without
+ * removing them from the canonical catalog: existing grants must remain readable, and object
+ * authorization still uses the full resource catalog where applicable.
  */
 const ROLE_GRANT_EXCLUDED_RESOURCE_TYPES = new Set([
   "agent",
   "agent_tpl",
+  "concept_group",
   "connector_type",
   "data_flow",
+  "action_type",
+  "metric",
+  "object_type",
+  "relation_type",
   "risk_type",
+  "safe_admin",
+  "small_model",
+  "large_model",
   "stream_data_pipeline",
 ]);
 
