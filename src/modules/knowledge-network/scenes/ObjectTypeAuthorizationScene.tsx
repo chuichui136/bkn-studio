@@ -594,6 +594,25 @@ export function ObjectTypeAuthorizationScene() {
     }),
     [baseOps, candidateOperations],
   );
+  const normalizeCandidateOperations = (operations: string[]) => {
+    const selected = new Set(operations);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const operation of baseOps) {
+        if (!selected.has(operation.key)) {
+          continue;
+        }
+        for (const requirement of operation.requires) {
+          if (!selected.has(requirement)) {
+            selected.add(requirement);
+            changed = true;
+          }
+        }
+      }
+    }
+    return baseOps.filter((operation) => selected.has(operation.key)).map((operation) => operation.key);
+  };
 
   const isProtectedBaseGrant = (grant: ObjectGrant) =>
     (!isPlatformAuthzAdmin && isDelegateProtectedGrant(grant)) ||
@@ -620,6 +639,17 @@ export function ObjectTypeAuthorizationScene() {
   const candidateManagedOperations = new Set(
     candidateManagedSources.map((source) => source.operation),
   );
+  const candidateMissingManagedRequirements = baseOps.flatMap((operation) =>
+    candidateManagedOperations.has(operation.key)
+      ? operation.requires.flatMap((requirementKey) => {
+          if (candidateManagedOperations.has(requirementKey)) {
+            return [];
+          }
+          const requirement = baseOps.find(({ key }) => key === requirementKey);
+          return requirement ? [{ operation, requirement }] : [];
+        })
+      : [],
+  );
   const candidateHasDuplicateManagedOperations =
     candidateManagedSources.length !== candidateManagedOperations.size;
   const candidateWriteLocked = candidateGrant ? isProtectedBaseGrant(candidateGrant) : false;
@@ -641,7 +671,7 @@ export function ObjectTypeAuthorizationScene() {
           source.authoritySource === candidateAuthoritySource,
       )
       .map((source) => source.operation))];
-    setCandidateOperations(directOperations.length ? directOperations : grant?.operations ?? []);
+    setCandidateOperations(normalizeCandidateOperations(directOperations));
   };
 
   const toggleCandidateOperation = (operationKey: string) => {
@@ -1128,6 +1158,19 @@ export function ObjectTypeAuthorizationScene() {
             </AppButton>
           </footer>
         </div>
+        {candidateMissingManagedRequirements.length ? (
+          <div className={styles.baseGrantNotice} role="status">
+            <WarningOutlined />
+            {candidateMissingManagedRequirements.map(({ operation, requirement }) => (
+              <span key={`${operation.key}:${requirement.key}`}>
+                {t("systemAdmin.objectGrants.historicalRequiredSelectionNotice", {
+                  operation: operation.label,
+                  requirement: requirement.label,
+                })}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {candidateRequirements.length ? (
           <div className={styles.baseGrantNotice}>
             <InfoCircleOutlined />

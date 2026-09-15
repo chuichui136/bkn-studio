@@ -337,6 +337,178 @@ describe("ObjectTypeAuthorizationScene", () => {
     unmount();
   });
 
+  it("does not copy operations from another grant authority source", async () => {
+    mocks.getDetail.mockResolvedValue({
+      color: "#356af6",
+      conceptGroupIds: [],
+      conceptGroupNames: [],
+      dataProperties: [],
+      description: "",
+      displayKey: "",
+      hasIndex: false,
+      id: "object-1",
+      incrementalKey: "",
+      logicProperties: [],
+      name: "Customer",
+      operations: ["view_detail"],
+      primaryKeys: [],
+      tags: [],
+      updateTime: "",
+      updaterName: "",
+    });
+    const alice = {
+      account: "alice",
+      accountType: "local",
+      email: "alice@example.com",
+      enabled: true,
+      id: "user-1",
+      name: "Alice",
+      roleIds: [],
+      telephone: "",
+    };
+    mocks.listUsersPage.mockResolvedValue({ users: [alice] });
+    mocks.listObjectGrantsForObject.mockResolvedValue({
+      accounts: [alice],
+      grants: [{
+        accessorId: "user-1",
+        grants: [
+          {
+            accessorId: "user-1",
+            active: true,
+            authoritySource: "admin_authz",
+            effect: "allow",
+            grantId: "grant-admin-view",
+            inherited: false,
+            operation: "view_detail",
+            policySource: "professional_rule",
+          },
+          {
+            accessorId: "user-1",
+            active: true,
+            authoritySource: "admin_authz",
+            effect: "allow",
+            grantId: "grant-admin-modify",
+            inherited: false,
+            operation: "modify",
+            policySource: "professional_rule",
+          },
+        ],
+        objId: "network-1/object-1",
+        objName: "Customer",
+        objSub: "network-1",
+        objType: "object_type",
+        operations: ["view_detail", "modify"],
+      }],
+    });
+
+    const { unmount } = render(<ObjectTypeAuthorizationScene />);
+
+    await screen.findByText("systemAdmin.objectGrants.newGrantTitle");
+    fireEvent.mouseDown(screen.getByRole("combobox", {
+      name: "systemAdmin.objectGrants.grantUserLabel",
+    }));
+    fireEvent.click(await screen.findByRole("option", { name: /Alice/ }));
+    expect(screen.getByRole("button", { name: "view_detail" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "modify" }).getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "query_data" }));
+    fireEvent.click(screen.getByRole("button", {
+      name: /systemAdmin\.objectGrants\.addGrant/,
+    }));
+
+    expect(mocks.upsertObjectGrantForObject).toHaveBeenCalledWith({
+      accessorId: "user-1",
+      effect: "allow",
+      objId: "network-1/object-1",
+      objName: "Customer",
+      objSub: "network-1",
+      objType: "object_type",
+      operations: ["view_detail", "query_data"],
+    });
+    unmount();
+  });
+
+  it("repairs a managed grant whose operation is missing a prerequisite", async () => {
+    mocks.getDetail.mockResolvedValue({
+      color: "#356af6",
+      conceptGroupIds: [],
+      conceptGroupNames: [],
+      dataProperties: [],
+      description: "",
+      displayKey: "",
+      hasIndex: false,
+      id: "object-1",
+      incrementalKey: "",
+      logicProperties: [],
+      name: "Customer",
+      operations: ["view_detail"],
+      primaryKeys: [],
+      tags: [],
+      updateTime: "",
+      updaterName: "",
+    });
+    const alice = {
+      account: "alice",
+      accountType: "local",
+      email: "alice@example.com",
+      enabled: true,
+      id: "user-1",
+      name: "Alice",
+      roleIds: [],
+      telephone: "",
+    };
+    mocks.listUsersPage.mockResolvedValue({ users: [alice] });
+    mocks.listObjectGrantsForObject.mockResolvedValue({
+      accounts: [alice],
+      grants: [{
+        accessorId: "user-1",
+        grants: [{
+          accessorId: "user-1",
+          active: true,
+          authoritySource: "owner_delegate",
+          effect: "allow",
+          grantId: "grant-query",
+          inherited: false,
+          operation: "query_data",
+          policySource: "professional_rule",
+        }],
+        objId: "network-1/object-1",
+        objName: "Customer",
+        objSub: "network-1",
+        objType: "object_type",
+        operations: ["query_data"],
+      }],
+    });
+
+    const { unmount } = render(<ObjectTypeAuthorizationScene />);
+
+    await screen.findByText("systemAdmin.objectGrants.newGrantTitle");
+    fireEvent.mouseDown(screen.getByRole("combobox", {
+      name: "systemAdmin.objectGrants.grantUserLabel",
+    }));
+    fireEvent.click(await screen.findByRole("option", { name: /Alice/ }));
+    expect(screen.getByRole("button", { name: "query_data" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "view_detail" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("systemAdmin.objectGrants.historicalRequiredSelectionNotice")).not.toBeNull();
+
+    const saveButton = screen.getByRole("button", {
+      name: /systemAdmin\.objectGrants\.addGrant/,
+    });
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(saveButton);
+
+    expect(mocks.upsertObjectGrantForObject).toHaveBeenCalledWith({
+      accessorId: "user-1",
+      effect: "allow",
+      objId: "network-1/object-1",
+      objName: "Customer",
+      objSub: "network-1",
+      objType: "object_type",
+      operations: ["view_detail", "query_data"],
+    });
+    unmount();
+  });
+
   it("disables deletion when a legacy grant has no stable revocable source id", async () => {
     mocks.getDetail.mockResolvedValue({
       color: "#356af6",

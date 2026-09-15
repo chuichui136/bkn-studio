@@ -254,6 +254,8 @@ export const systemAdminZhCN = {
       requiredBySelection: "该操作是已选操作的前置条件，暂不可取消",
       requiredSelectionNotice:
         "“{{dependents}}”依赖“{{requirement}}”，已保留“{{requirement}}”；取消依赖操作后即可取消。",
+      historicalRequiredSelectionNotice:
+        "已有“{{operation}}”授权缺少前置权限“{{requirement}}”，已自动选中；保存即可修复该授权。",
       newGrantTitle: "新增授权",
       grantUserLabel: "授权用户",
       grantOperationsLabel: "允许操作",
