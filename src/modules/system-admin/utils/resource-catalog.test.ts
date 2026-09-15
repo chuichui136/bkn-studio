@@ -113,17 +113,25 @@ describe("resource-catalog", () => {
     expect(operationsForType("action_type").map((item) => item.key)).toContain("execute");
   });
 
-  it("offers data querying for every knowledge-network child type", () => {
+  it("offers data querying only for knowledge-network child types that declare it", () => {
     for (const type of [
       "concept_group",
       "object_type",
       "relation_type",
-      "action_type",
       "metric",
       "risk_type",
     ]) {
       expect(operationsForType(type).map((item) => item.key)).toContain("query_data");
     }
+  });
+
+  it("keeps action-type grants aligned with the backend vocabulary", () => {
+    expect(operationsForType("action_type").map((item) => item.key)).toEqual([
+      "view_detail",
+      "modify",
+      "delete",
+      "execute",
+    ]);
   });
 
   it("offers action execution on a knowledge network", () => {

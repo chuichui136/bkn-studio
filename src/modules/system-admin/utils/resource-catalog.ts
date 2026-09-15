@@ -100,7 +100,10 @@ const KNOWLEDGE_NETWORK_CHILD_AUTHZ = [
   "delete",
   "query_data",
 ];
-const ACTION_TYPE_AUTHZ = [...KNOWLEDGE_NETWORK_CHILD_AUTHZ, "execute"];
+// An action type describes executable behavior, rather than data that can be
+// queried. Keep this vocabulary aligned with bkn-safe's action_type catalog:
+// it has no create or query_data operation.
+const ACTION_TYPE_AUTHZ = ["view_detail", "modify", "delete", "execute"];
 // A data connection owns its tables: creating, editing and building one is judged on the catalog,
 // not on the table (openbkn-ai/bkn-foundry#986). The table itself declares only these two. Both
 // lists match the operations bkn-safe actually stores on these types.
