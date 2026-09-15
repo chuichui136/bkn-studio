@@ -757,7 +757,7 @@ export function ObjectAuthorizeDrawer({
       />
       <span>
         {t("systemAdmin.objectGrants.sourceDrawerTitle", {
-          name: resolveGrantee(sourceGrant.accessorId).name,
+          name: resolveGrantee(sourceGrant).name,
         })}
       </span>
     </div>
