@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AppButton } from "@/framework/ui/common/AppButton";
+import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
 import type { ResourceGrant, ResourceRef } from "@/modules/system-admin/types/admin";
 import {
   operationLabel,
@@ -54,7 +55,13 @@ export function ResourceGrantEditor({
   value,
 }: ResourceGrantEditorProps) {
   const { t } = useTranslation();
-  const { catalog, catalogLoading, operationsForType } = useAuthorizationCatalog();
+  const {
+    catalog,
+    catalogError,
+    catalogLoading,
+    operationsForType,
+    retryAuthorizationCatalog,
+  } = useAuthorizationCatalog();
   const [draftType, setDraftType] = useState<string>(
     lockedResource?.type ?? ROLE_GRANT_RESOURCE_TYPES[0].type,
   );
@@ -198,61 +205,64 @@ export function ResourceGrantEditor({
       )}
 
       {!disabled ? (
-        <div className={styles.grantAddRow}>
-          {!lockedResource ? (
-            <>
-              <Select
-                disabled={catalogLoading}
-                onChange={(type) => {
-                  setDraftType(type);
-                  setDraftOps([]);
-                }}
-                options={ROLE_GRANT_RESOURCE_TYPES
-                  .filter((item) => catalog?.resourceTypes.some((resourceType) => resourceType.id === item.type))
-                  .map((item) => ({
-                    label: resourceTypeLabel(item.type),
-                    value: item.type,
-                  }))}
-                style={{ minWidth: 160 }}
-                value={draftType}
-              />
-              {!typeWideOnly ? (
-                <Input
-                  disabled={wholeType}
-                  onChange={(event) => setDraftId(event.target.value)}
-                  placeholder={t("systemAdmin.grant.resourceIdPlaceholder")}
-                  style={{ flex: 1, minWidth: 140 }}
-                  value={wholeType ? "" : draftId}
+        <>
+          <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
+          <div className={styles.grantAddRow}>
+            {!lockedResource ? (
+              <>
+                <Select
+                  disabled={catalogLoading}
+                  onChange={(type) => {
+                    setDraftType(type);
+                    setDraftOps([]);
+                  }}
+                  options={ROLE_GRANT_RESOURCE_TYPES
+                    .filter((item) => catalog?.resourceTypes.some((resourceType) => resourceType.id === item.type))
+                    .map((item) => ({
+                      label: resourceTypeLabel(item.type),
+                      value: item.type,
+                    }))}
+                  style={{ minWidth: 160 }}
+                  value={draftType}
                 />
-              ) : null}
-              <Checkbox
-                checked={typeWideOnly || wholeType}
-                disabled={typeWideOnly}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setWholeType(checked);
-                  if (checked || typeWideOnly) {
-                    setDraftId("");
-                  }
-                }}
-              >
-                {t("systemAdmin.grant.wholeType")}
-              </Checkbox>
-            </>
-          ) : null}
-          <Select
-            disabled={catalogLoading}
-            mode="multiple"
-            onChange={(selected) => setDraftOps(normalizeOperations(selected, ops))}
-            options={ops.map((op) => ({ label: op.label, value: op.key }))}
-            placeholder={t("systemAdmin.grant.operationsPlaceholder")}
-            style={{ flex: 1, minWidth: 200 }}
-            value={draftOps}
-          />
-          <AppButton disabled={catalogLoading} icon={<PlusOutlined />} onClick={addGrant} type="primary">
-            {t("systemAdmin.grant.add")}
-          </AppButton>
-        </div>
+                {!typeWideOnly ? (
+                  <Input
+                    disabled={wholeType}
+                    onChange={(event) => setDraftId(event.target.value)}
+                    placeholder={t("systemAdmin.grant.resourceIdPlaceholder")}
+                    style={{ flex: 1, minWidth: 140 }}
+                    value={wholeType ? "" : draftId}
+                  />
+                ) : null}
+                <Checkbox
+                  checked={typeWideOnly || wholeType}
+                  disabled={typeWideOnly}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setWholeType(checked);
+                    if (checked || typeWideOnly) {
+                      setDraftId("");
+                    }
+                  }}
+                >
+                  {t("systemAdmin.grant.wholeType")}
+                </Checkbox>
+              </>
+            ) : null}
+            <Select
+              disabled={catalogLoading}
+              mode="multiple"
+              onChange={(selected) => setDraftOps(normalizeOperations(selected, ops))}
+              options={ops.map((op) => ({ label: op.label, value: op.key }))}
+              placeholder={t("systemAdmin.grant.operationsPlaceholder")}
+              style={{ flex: 1, minWidth: 200 }}
+              value={draftOps}
+            />
+            <AppButton disabled={catalogLoading} icon={<PlusOutlined />} onClick={addGrant} type="primary">
+              {t("systemAdmin.grant.add")}
+            </AppButton>
+          </div>
+        </>
       ) : null}
     </div>
   );

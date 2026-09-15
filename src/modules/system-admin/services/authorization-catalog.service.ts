@@ -30,7 +30,7 @@ export type AuthorizationCatalog = {
 };
 
 const useMock = import.meta.env.VITE_USE_MOCK !== "false";
-const AUTHZ = "/safe/v1/authz";
+const AUTHZ_CATALOG = "/safe/v1/me/authorization-catalog";
 
 export const usesMockAuthorizationCatalog = useMock;
 
@@ -38,15 +38,25 @@ let catalogPromise: Promise<AuthorizationCatalog> | undefined;
 
 /**
  * Reads the catalog persisted by bkn-safe, rather than a Studio-maintained
- * operation list. The mock conversion is intentionally confined to demo mode;
- * real authorization authoring has no stale fallback when this request fails.
+ * operation list. The mock conversion is intentionally confined to demo mode.
+ * The browser route is token-gated; the tokenless /authz route is ClusterIP-only.
  */
 export function getAuthorizationCatalog(): Promise<AuthorizationCatalog> {
   if (useMock) {
     return Promise.resolve(mockAuthorizationCatalog());
   }
-  catalogPromise ??= http.get<BackendAuthorizationCatalog>(`${AUTHZ}/catalog`)
-    .then((response) => normalizeAuthorizationCatalog(response.data));
+  if (!catalogPromise) {
+    const request = http.get<BackendAuthorizationCatalog>(AUTHZ_CATALOG)
+      .then((response) => normalizeAuthorizationCatalog(response.data));
+    catalogPromise = request;
+    // Do not retain a rejected promise for the lifetime of the SPA. A transient
+    // gateway or token-refresh failure must be retryable from the authoring UI.
+    void request.catch(() => {
+      if (catalogPromise === request) {
+        catalogPromise = undefined;
+      }
+    });
+  }
   return catalogPromise;
 }
 

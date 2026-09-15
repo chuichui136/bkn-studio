@@ -23,6 +23,7 @@ import { useCapability } from "@/framework/entitlement/use-entitlement";
 import { PermissionGate } from "@/framework/permission/PermissionGate";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
+import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
 import { DirectoryUserPicker } from "@/modules/system-admin/components/DirectoryUserPicker";
 import { authzPoints } from "@/modules/system-admin/permissions";
 import { listUsers } from "@/modules/system-admin/services/admin.service";
@@ -85,7 +86,13 @@ export function ObjectAuthorizationCreateScene() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { message } = useAppServices();
-  const { catalog, catalogLoading, operationsForType } = useAuthorizationCatalog();
+  const {
+    catalog,
+    catalogError,
+    catalogLoading,
+    operationsForType,
+    retryAuthorizationCatalog,
+  } = useAuthorizationCatalog();
   const fineGrainedCapability = useCapability(CAPABILITIES.PERM_FINE_GRAINED);
   const fineGrained = fineGrainedCapability === "available";
   // Deep link from the object's own page (`?object=catalog::<id>`), so an administrator sent here
@@ -447,6 +454,7 @@ export function ObjectAuthorizationCreateScene() {
         </div>
       </header>
 
+      <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
       {loadError ? (
         <Alert
           action={

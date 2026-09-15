@@ -11,6 +11,7 @@ import i18n from "@/app/locales/i18n";
 import {
   getAuthorizationCatalog,
   mockAuthorizationCatalog,
+  resetAuthorizationCatalogCache,
   type AuthorizationCatalog,
   usesMockAuthorizationCatalog,
 } from "@/modules/system-admin/services/authorization-catalog.service";
@@ -26,6 +27,7 @@ export function useAuthorizationCatalog() {
     usesMockAuthorizationCatalog ? mockAuthorizationCatalog() : undefined,
   );
   const [error, setError] = useState<unknown>();
+  const [requestRevision, setRequestRevision] = useState(0);
 
   useEffect(() => {
     if (catalog) {
@@ -47,7 +49,13 @@ export function useAuthorizationCatalog() {
     return () => {
       active = false;
     };
-  }, [catalog]);
+  }, [catalog, requestRevision]);
+
+  const retryAuthorizationCatalog = useCallback(() => {
+    resetAuthorizationCatalogCache();
+    setError(undefined);
+    setRequestRevision((revision) => revision + 1);
+  }, []);
 
   const operationsForType = useCallback((type: string): CatalogOperationOption[] => {
     const resourceType = catalog?.resourceTypes.find((item) => item.id === type);
@@ -75,8 +83,11 @@ export function useAuthorizationCatalog() {
   return {
     catalog,
     catalogError: error,
-    catalogLoading: !catalog && !error,
+    // Consumers use this as a "catalog is not ready" guard. Keep authoring
+    // controls disabled after an error until the user explicitly retries.
+    catalogLoading: !catalog,
     operationsForType,
     resourceTypeOptions,
+    retryAuthorizationCatalog,
   };
 }

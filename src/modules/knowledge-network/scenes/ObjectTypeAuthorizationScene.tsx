@@ -44,6 +44,7 @@ import { hasPermissions } from "@/framework/permission/has-permissions";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { DirectoryUserPicker } from "@/modules/system-admin";
+import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
 import { ObjectTypeDataAttributeFormDrawer } from "@/modules/knowledge-network/components/object-type/data-attribute/ObjectTypeDataAttributeFormDrawer";
 import { KnowledgeNetworkResourceConfigShell } from "@/modules/knowledge-network/components/shared/KnowledgeNetworkResourceConfigShell";
 import { useKnowledgeNetworkCanOperate } from "@/modules/knowledge-network/hooks/useKnowledgeNetworkCanModify";
@@ -145,7 +146,12 @@ export function ObjectTypeAuthorizationScene() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { message, modal, runtimeConfig } = useAppServices();
-  const { catalogLoading, operationsForType } = useAuthorizationCatalog();
+  const {
+    catalogError,
+    catalogLoading,
+    operationsForType,
+    retryAuthorizationCatalog,
+  } = useAuthorizationCatalog();
   const { networkId = "", objectTypeId = "" } = useParams<{
     networkId: string;
     objectTypeId: string;
@@ -1478,6 +1484,7 @@ export function ObjectTypeAuthorizationScene() {
       title={t("knowledgeNetwork.propertyAuthorizationTitle", { name: detail.name })}
     >
       <div className={styles.page}>
+        <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
         <Tabs
           activeKey={activeTab}
           items={[

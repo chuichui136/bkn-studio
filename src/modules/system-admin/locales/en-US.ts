@@ -131,6 +131,9 @@ export const systemAdminEnUS = {
       addOperation: "Add operation",
       operationsPlaceholder: "Pick operations",
     },
+    authorizationCatalog: {
+      loadFailed: "Unable to load the current authorization catalog. Permission changes are unavailable until it is retried.",
+    },
     authorize: {
       title: "Authorize · {{name}}",
       subtitle: "Grant this data connection to a role: pick a role and the operations to allow; use Revoke to undo.",

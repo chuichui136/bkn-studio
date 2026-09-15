@@ -141,6 +141,10 @@ describe("resource-catalog", () => {
       .toEqual([]);
     expect(operationsForType("catalog").find((item) => item.key === "resource_manage")?.requires)
       .toEqual(["view_detail"]);
+    for (const operation of ["modify", "delete", "authorize"]) {
+      expect(operationsForType("knowledge_network").find((item) => item.key === operation)?.requires)
+        .toEqual(["view_detail"]);
+    }
     expect(operationsForType("resource").find((item) => item.key === "query_data")?.requires)
       .toEqual([]);
   });

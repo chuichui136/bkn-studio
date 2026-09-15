@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { useAppServices } from "@/framework/context/use-app-services";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
+import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
 import { listRoles, setRolePermission } from "@/modules/system-admin/services/admin.service";
 import type { AdminRole } from "@/modules/system-admin/types/admin";
 import { roleDescription } from "@/modules/system-admin/utils/role-catalog";
@@ -44,7 +45,12 @@ export function CatalogAuthorizeModal({
 }: CatalogAuthorizeModalProps) {
   const { t } = useTranslation();
   const { message } = useAppServices();
-  const { catalogLoading, operationsForType } = useAuthorizationCatalog();
+  const {
+    catalogError,
+    catalogLoading,
+    operationsForType,
+    retryAuthorizationCatalog,
+  } = useAuthorizationCatalog();
   const catalogOps = useMemo(() => operationsForType("catalog"), [operationsForType]);
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [loading, setLoading] = useState(false);
@@ -165,6 +171,7 @@ export function CatalogAuthorizeModal({
       <p className={styles.subText} style={{ marginTop: 0 }}>
         {t("systemAdmin.authorize.subtitle")}
       </p>
+      <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
 
       <div className={styles.grantAddRow} style={{ marginBottom: 16 }}>
         <Select

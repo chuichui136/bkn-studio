@@ -32,6 +32,7 @@ import { RequireEdition } from "@/framework/entitlement/RequireEdition";
 import { useCapability } from "@/framework/entitlement/use-entitlement";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
+import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
 import { hasPermissions } from "@/framework/permission/has-permissions";
 import { authzPoints } from "@/modules/system-admin/permissions";
 import {
@@ -111,7 +112,12 @@ export function ObjectAuthorizeDrawer({
 }: ObjectAuthorizeDrawerProps) {
   const { t } = useTranslation();
   const { message, modal, runtimeConfig } = useAppServices();
-  const { catalogLoading, operationsForType } = useAuthorizationCatalog();
+  const {
+    catalogError,
+    catalogLoading,
+    operationsForType,
+    retryAuthorizationCatalog,
+  } = useAuthorizationCatalog();
   const fineGrainedState = useCapability(CAPABILITIES.PERM_FINE_GRAINED);
   const fineGrained = fineGrainedState === "available";
   const enterpriseAvailable = useCapability(CAPABILITIES.PERM_OBJECT_LEVEL) === "available";
@@ -1077,6 +1083,7 @@ export function ObjectAuthorizeDrawer({
       title={drawerTitle}
       width="min(920px, calc(100vw - 24px))"
     >
+      <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
       {content}
     </Drawer>
   );
