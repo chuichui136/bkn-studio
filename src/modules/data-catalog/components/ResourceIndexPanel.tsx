@@ -51,6 +51,7 @@ import type {
   CatalogResource,
 } from "@/modules/data-catalog/types/data-catalog";
 import { isActiveBuildTask } from "@/modules/data-catalog/utils/build-task-guards";
+import { hasCatalogResourceOperation } from "@/modules/data-catalog/utils/resource-operations";
 import { hasCatalogOperation, type CatalogRecord } from "@/shared/catalog";
 
 import panelStyles from "./ResourceIndexPanel.module.css";
@@ -64,8 +65,10 @@ type ResourceIndexPanelProps = {
   indexViewExplicit?: boolean;
   indexView: ResourceIndexView;
   onIndexViewChange: (view: ResourceIndexView) => void;
+  onLatestTaskLoaded?: (resourceId: string, latest: BuildTask | null) => void;
   onRefresh: () => Promise<void> | void;
   resource: CatalogResource;
+  taskStatusUnavailable?: boolean;
   tasks: BuildTask[];
 };
 
@@ -173,8 +176,10 @@ export function ResourceIndexPanel({
   indexView,
   indexViewExplicit = false,
   onIndexViewChange,
+  onLatestTaskLoaded,
   onRefresh,
   resource,
+  taskStatusUnavailable = false,
   tasks,
 }: ResourceIndexPanelProps) {
   const { i18n, t } = useTranslation();
@@ -196,6 +201,7 @@ export function ResourceIndexPanel({
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const autoPickedRef = useRef(false);
   const historyRequestIdRef = useRef(0);
+  const supportsTaskView = resource.category !== "dataset";
   const canViewTasks = canViewResourceIndexTasks(resource, catalog);
   const resourceChanged = filtersResourceId !== resource.id;
 
@@ -214,10 +220,20 @@ export function ResourceIndexPanel({
         resourceId: resource.id,
         sort,
         statuses: statusFilter.length ? statusFilter : undefined,
-      });
+      }, { skipErrorToast: true });
       if (requestId === historyRequestIdRef.current) {
         setHistoryTasks(result.items);
         setHistoryTotal(result.total);
+        if (
+          targetPage === 1
+          && direction === "desc"
+          && sort === "create_time"
+          && !modeFilter
+          && !executeTypeFilter
+          && statusFilter.length === 0
+        ) {
+          onLatestTaskLoaded?.(resource.id, result.items[0] ?? null);
+        }
       }
     } catch (error) {
       if (requestId === historyRequestIdRef.current) {
@@ -228,7 +244,7 @@ export function ResourceIndexPanel({
         setHistoryLoading(false);
       }
     }
-  }, [canViewTasks, direction, executeTypeFilter, modeFilter, resource.id, sort, statusFilter]);
+  }, [canViewTasks, direction, executeTypeFilter, modeFilter, onLatestTaskLoaded, resource.id, sort, statusFilter]);
 
   const refreshTasks = useCallback(async () => {
     await onRefresh();
@@ -241,6 +257,10 @@ export function ResourceIndexPanel({
     historyRequestIdRef.current += 1;
   }, [resource.id]);
 
+  useEffect(() => () => {
+    historyRequestIdRef.current += 1;
+  }, []);
+
   const sortedTasks = useMemo(() => sortTasks(tasks), [tasks]);
   const state = useMemo(
     () => indexStateOf(sortedTasks, resource.localIndexStatus),
@@ -248,12 +268,13 @@ export function ResourceIndexPanel({
   );
   const gate = resourceGateOf(catalog);
   const resourceBlockReason = resourceQueryBlockReason(resource);
-  const buildActionsDisabled = !gate.ok || resourceBlockReason !== null;
+  const buildActionsDisabled = !gate.ok || resourceBlockReason !== null || taskStatusUnavailable;
   const canModifyResource = hasCatalogOperation(catalog, "resource_manage");
+  const canViewResourceDetail = hasCatalogResourceOperation(resource, "view_detail");
   const readOnly = isResourceIndexReadOnly(catalog, canModifyResource);
   const canManageBuildTasks = canManageResourceBuildTasks(resource, catalog);
   const canManageTaskActions = canManageBuildTasks;
-  const latest = state.latest;
+  const latest = taskStatusUnavailable ? null : state.latest;
   const activeTask = latest && CONTROLLABLE_TASK_STATUSES.has(latest.status) ? latest : null;
   const progressSource = progressTask(latest);
   const batchDeleteTargets = historyTasks.filter(
@@ -305,10 +326,10 @@ export function ResourceIndexPanel({
   ]);
 
   useEffect(() => {
-    if (!canViewTasks && indexView === "tasks") {
+    if (!supportsTaskView && indexView === "tasks") {
       onIndexViewChange("config");
     }
-  }, [canViewTasks, indexView, onIndexViewChange]);
+  }, [indexView, onIndexViewChange, supportsTaskView]);
 
   useEffect(() => {
     if (!resourceChanged) return;
@@ -528,20 +549,20 @@ export function ResourceIndexPanel({
       </div>
     ) : null;
 
-  const renderConfigTab = () => (
+  const renderConfigTab = () => canViewResourceDetail ? (
     <>
       {gateBanner}
       {!canModifyResource ? (
         <Alert
-          className={panelStyles.statusAlert}
           message={t("dataCatalog.build.configReadOnly")}
           showIcon
-          type="info"
+          type="warning"
         />
       ) : null}
       <div className={panelStyles.configureCard}>
         <IndexConfigFormPanel
           active={active && indexView === "config"}
+          canViewTasks={canViewTasks}
           hideBuildControls={readOnly}
           onSaved={() => {
             void onRefresh();
@@ -551,6 +572,8 @@ export function ResourceIndexPanel({
         />
       </div>
     </>
+  ) : (
+    <Alert message={t("dataCatalog.permissionRequired")} showIcon type="warning" />
   );
 
   const renderTasksTab = () => (
@@ -564,10 +587,12 @@ export function ResourceIndexPanel({
               {t("dataCatalog.indexWorkspace.statusCardTitle")}
             </span>
             <span className={panelStyles.statusStripValue}>
-              {statusSummary ??
-                (resource.localIndexStatus === "available"
-                  ? t("dataCatalog.resource.effectiveActive")
-                  : t("dataCatalog.resource.noEffectiveIndex"))}
+              {taskStatusUnavailable
+                ? t("dataCatalog.resourceWorkspace.indexStatusUnavailable")
+                : statusSummary ??
+                  (resource.localIndexStatus === "available"
+                    ? t("dataCatalog.resource.effectiveActive")
+                    : t("dataCatalog.resource.noEffectiveIndex"))}
             </span>
           </div>
           <div className={panelStyles.sectionActions}>
@@ -635,9 +660,10 @@ export function ResourceIndexPanel({
               onGoConfigure={() => onIndexViewChange("config")}
               onStarted={() => {
                 setSelectedKeys([]);
+                const alreadyOnFirstPage = taskPage === 1;
                 setTaskPage(1);
                 void onRefresh();
-                void loadHistory(1, taskPageSize);
+                if (alreadyOnFirstPage) void loadHistory(1, taskPageSize);
               }}
               resource={resource}
             />
@@ -675,7 +701,7 @@ export function ResourceIndexPanel({
         </div>
         {historyError ? (
           <Alert
-            action={<AppButton onClick={() => void refreshTasks()} type="link">{t("common.retry")}</AppButton>}
+            description={t("dataCatalog.resourceWorkspace.loadErrorRefreshHint")}
             message={historyError}
             showIcon
             type="error"
@@ -740,7 +766,7 @@ export function ResourceIndexPanel({
             >
               {t("dataCatalog.indexWorkspace.viewConfig")}
             </button>
-            {canViewTasks ? (
+            {supportsTaskView ? (
               <button
                 className={
                   indexView === "tasks" ? panelStyles.viewTabActive : panelStyles.viewTab
@@ -769,7 +795,11 @@ export function ResourceIndexPanel({
           </div>
         </div>
 
-        {!canViewTasks || indexView === "config" ? renderConfigTab() : renderTasksTab()}
+        {!supportsTaskView || indexView === "config" ? renderConfigTab() : canViewTasks ? (
+          renderTasksTab()
+        ) : (
+          <Alert message={t("dataCatalog.permissionRequired")} showIcon type="warning" />
+        )}
       </div>
 
       {detailTaskId ? (

@@ -79,8 +79,10 @@ export function ResourceWorkspaceScene({
   const [catalog, setCatalog] = useState<CatalogRecord | null>(null);
   const [catalogVisibilityRestricted, setCatalogVisibilityRestricted] = useState(false);
   const [tasks, setTasks] = useState<BuildTask[]>([]);
+  const [taskStatusUnavailable, setTaskStatusUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [resourceReadForbidden, setResourceReadForbidden] = useState(false);
   const [detailEditing, setDetailEditing] = useState(false);
   const [resourceAction, setResourceAction] = useState<"discover" | "enabled" | null>(null);
   const [authorizeOpen, setAuthorizeOpen] = useState(false);
@@ -92,6 +94,8 @@ export function ResourceWorkspaceScene({
     const resourceVersion = ++resourceVersionRef.current;
     const loadRequestId = ++loadRequestIdRef.current;
     setLoadError(null);
+    setResourceReadForbidden(false);
+    setTaskStatusUnavailable(false);
     setLoading(true);
 
     try {
@@ -116,39 +120,57 @@ export function ResourceWorkspaceScene({
           }
           throw error;
         });
-      const latestTaskPage = hasCatalogOperation(catalogRecord, "task_manage")
-        ? await listBuildTaskPage({
+      let latestTasks: BuildTask[] = [];
+      let taskLoadFailed = false;
+      if (hasCatalogOperation(catalogRecord, "task_manage")) {
+        try {
+          const latestTaskPage = await listBuildTaskPage({
             direction: "desc",
             limit: 1,
             resourceId,
             sort: "create_time",
-          })
-        : { items: [] };
+          }, { skipErrorToast: true });
+          latestTasks = latestTaskPage.items;
+        } catch {
+          taskLoadFailed = true;
+        }
+      }
 
       if (resourceVersionRef.current === resourceVersion) {
         setResource(detail);
+        setResourceReadForbidden(false);
       }
       if (loadRequestIdRef.current === loadRequestId) {
         setCatalog(catalogRecord);
         setCatalogVisibilityRestricted(catalogRecord === null);
-        setTasks(latestTaskPage.items);
+        setTasks(latestTasks);
+        setTaskStatusUnavailable(taskLoadFailed);
       }
     } catch (error) {
       if (
         resourceVersionRef.current === resourceVersion
         && loadRequestIdRef.current === loadRequestId
       ) {
+        const forbidden = isRequestForbidden(error);
         setResource(null);
-        setLoadError(extractRequestErrorMessage(error));
+        setResourceReadForbidden(forbidden);
+        setLoadError(forbidden ? null : extractRequestErrorMessage(error));
         setCatalog(null);
         setCatalogVisibilityRestricted(false);
         setTasks([]);
+        setTaskStatusUnavailable(false);
       }
     } finally {
       if (loadRequestIdRef.current === loadRequestId) {
         setLoading(false);
       }
     }
+  }, [resourceId]);
+
+  const handleLatestTaskLoaded = useCallback((loadedResourceId: string, latest: BuildTask | null) => {
+    if (loadedResourceId !== resourceId) return;
+    setTasks(latest ? [latest] : []);
+    setTaskStatusUnavailable(false);
   }, [resourceId]);
 
   useEffect(() => {
@@ -161,13 +183,45 @@ export function ResourceWorkspaceScene({
       const detail = await getCatalogResource(resourceId);
       if (detail && resourceVersionRef.current === resourceVersion) {
         setResource(detail);
+        setResourceReadForbidden(false);
+        return true;
       }
     } catch (error) {
       if (resourceVersionRef.current === resourceVersion) {
-        void message.error(extractRequestErrorMessage(error));
+        if (isRequestForbidden(error)) {
+          setResource(null);
+          setCatalog(null);
+          setTasks([]);
+          setTaskStatusUnavailable(false);
+          setResourceReadForbidden(true);
+          setLoadError(null);
+        } else {
+          void message.error(extractRequestErrorMessage(error));
+        }
       }
     }
+    return false;
   }, [message, resourceId]);
+
+  const refreshIndexContext = useCallback(async () => {
+    if (!await refreshResource() || !hasCatalogOperation(catalog, "task_manage")) return;
+    const resourceVersion = resourceVersionRef.current;
+    try {
+      const latestTaskPage = await listBuildTaskPage({
+        direction: "desc",
+        limit: 1,
+        resourceId,
+        sort: "create_time",
+      }, { skipErrorToast: true });
+      if (resourceVersionRef.current !== resourceVersion) return;
+      setTasks(latestTaskPage.items);
+      setTaskStatusUnavailable(false);
+    } catch {
+      if (resourceVersionRef.current === resourceVersion) {
+        setTaskStatusUnavailable(true);
+      }
+    }
+  }, [catalog, refreshResource, resourceId]);
 
   useEffect(() => {
     const previousTab = previousTabRef.current;
@@ -193,15 +247,22 @@ export function ResourceWorkspaceScene({
   const gate = catalogVisibilityRestricted ? { ok: true } : resourceGateOf(catalog);
   const canManageCatalogTasks = hasCatalogOperation(catalog, "task_manage");
   const canModifyResource = hasCatalogOperation(catalog, "resource_manage");
+  const canViewResourceDetail = hasCatalogResourceOperation(resource, "view_detail");
   const canQueryResource = hasCatalogResourceOperation(resource, "query_data");
   const canAuthorizeResource = Boolean(!catalog?.internal && canAuthorizeGrants);
-  const hideSemanticUnderstanding = Boolean(catalog?.internal) || !canManageCatalogTasks;
+  // Internal catalogs do not support semantic-understanding tasks. Missing task permission is
+  // handled inside the tab panel so the navigation remains discoverable and deep links stay valid.
+  const hideSemanticUnderstanding = Boolean(catalog?.internal);
   const discoveryFailed = resource?.lastDiscoverStatus === "error";
   const queryBlockReason = resource ? resourceQueryBlockReason(resource) : null;
   const resourceDisabled = queryBlockReason === "disabled";
   const resourceMissing = queryBlockReason === "missing";
   const resourceStale = queryBlockReason === "stale";
   const metadataUnavailable = queryBlockReason === "metadata_unavailable";
+
+  useEffect(() => {
+    if (!canViewResourceDetail) setDetailEditing(false);
+  }, [canViewResourceDetail]);
 
   useEffect(() => {
     if (hideSemanticUnderstanding && tab === "semantic-understanding") {
@@ -295,15 +356,47 @@ export function ResourceWorkspaceScene({
     );
   }
 
+  if (resourceReadForbidden) {
+    const permissionWarning = (
+      <div className={styles.tabPanel}>
+        <Alert
+          description={t("dataCatalog.resourceWorkspace.permissionRefreshHint")}
+          message={t("dataCatalog.permissionRequired")}
+          showIcon
+          type="warning"
+        />
+      </div>
+    );
+
+    return (
+      <section className={styles.contentSurface}>
+        <div className={styles.pageHeader}>
+          <SceneBackButton onClick={() => void navigate("/data-catalog")} />
+        </div>
+        <Tabs
+          activeKey={tab}
+          className={styles.pageTabs}
+          items={([
+            ["detail", "tabDetail"],
+            ["preview", "tabPreview"],
+            ["index", "tabIndex"],
+            ["semantic-understanding", "tabSemanticUnderstanding"],
+          ] as const).map(([key, label]) => ({
+            key,
+            label: t(`dataCatalog.resourceWorkspace.${label}`),
+            children: permissionWarning,
+          }))}
+          onChange={handleTabChange}
+        />
+      </section>
+    );
+  }
+
   if (loadError) {
     return (
       <section className={styles.contentSurface}>
         <Alert
-          action={
-            <AppButton onClick={() => void loadAll()} type="link">
-              {t("common.retry")}
-            </AppButton>
-          }
+          description={t("dataCatalog.resourceWorkspace.loadErrorRefreshHint")}
           message={loadError}
           showIcon
           type="error"
@@ -372,7 +465,9 @@ export function ResourceWorkspaceScene({
                   <span className={styles.contextDivider}>·</span>
                   <span className={styles.contextMeta}>
                     {t("dataCatalog.resource.headerIndexState")}{" "}
-                    {formatIndexStateLabel(indexState, t)}
+                    {taskStatusUnavailable
+                      ? t("dataCatalog.resourceWorkspace.indexStatusUnavailable")
+                      : formatIndexStateLabel(indexState, t)}
                   </span>
                 </>
               ) : null}
@@ -416,6 +511,14 @@ export function ResourceWorkspaceScene({
             ) : null}
           </Space>
         </div>
+
+        {taskStatusUnavailable ? (
+          <Alert
+            message={t("dataCatalog.resourceWorkspace.taskStatusUnavailable")}
+            showIcon
+            type="warning"
+          />
+        ) : null}
 
         {discoveryFailed || queryBlockReason ? (
           <Alert
@@ -481,15 +584,19 @@ export function ResourceWorkspaceScene({
               label: t("dataCatalog.resourceWorkspace.tabDetail"),
               children: (
                 <div className={styles.tabPanel}>
-                  <ResourceDetailPanel
-                    active={tab === "detail"}
-                    canEdit={canModifyResource}
-                    catalog={catalog}
-                    onEditingChange={setDetailEditing}
-                    onResourceRefreshed={handleResourceRefreshed}
-                    onUpdated={loadAll}
-                    resource={resource}
-                  />
+                  {canViewResourceDetail ? (
+                    <ResourceDetailPanel
+                      active={tab === "detail"}
+                      canEdit={canModifyResource}
+                      catalog={catalog}
+                      onEditingChange={setDetailEditing}
+                      onResourceRefreshed={handleResourceRefreshed}
+                      onUpdated={loadAll}
+                      resource={resource}
+                    />
+                  ) : (
+                    <Alert message={t("dataCatalog.permissionRequired")} showIcon type="warning" />
+                  )}
                 </div>
               ),
             },
@@ -501,7 +608,7 @@ export function ResourceWorkspaceScene({
                   <ResourcePreviewPanel
                     active={tab === "preview"}
                     disabled={!gate.ok || !canQueryResource}
-                    disabledMessage={canQueryResource ? previewDisabledMessage : t("common.noPermission")}
+                    disabledMessage={canQueryResource ? previewDisabledMessage : t("dataCatalog.permissionRequired")}
                     resource={resource}
                   />
                 </div>
@@ -518,8 +625,10 @@ export function ResourceWorkspaceScene({
                     indexView={indexView}
                     indexViewExplicit={indexViewExplicit}
                     onIndexViewChange={onIndexViewChange}
-                    onRefresh={loadAll}
+                    onLatestTaskLoaded={handleLatestTaskLoaded}
+                    onRefresh={refreshIndexContext}
                     resource={resource}
+                    taskStatusUnavailable={taskStatusUnavailable}
                     tasks={sortedTasks}
                   />
                 </div>

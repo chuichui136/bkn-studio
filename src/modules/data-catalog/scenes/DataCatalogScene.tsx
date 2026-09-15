@@ -38,7 +38,6 @@ import {
 
 import styles from "./DataCatalogScene.module.css";
 
-const useMock = import.meta.env.VITE_USE_MOCK !== "false";
 const CATALOG_PAGE_SIZE = 100;
 
 const CatalogDetailPanel = lazy(
@@ -423,23 +422,6 @@ export function DataCatalogScene({
     [discover],
   );
 
-  const pollActive = useCallback(() => {
-    void loadDiscovers();
-  }, [loadDiscovers]);
-
-  useEffect(() => {
-    if (useMock || !hasActiveWork) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      if (document.hidden) {
-        return;
-      }
-      void pollActive();
-    }, 10_000);
-    return () => window.clearInterval(timer);
-  }, [hasActiveWork, pollActive]);
-
   const prevActiveRef = useRef(hasActiveWork);
   useEffect(() => {
     if (prevActiveRef.current && !hasActiveWork) {
@@ -502,11 +484,7 @@ export function DataCatalogScene({
     if (loadError) {
       return (
         <Alert
-          action={
-            <AppButton onClick={() => void loadAll()} type="link">
-              {t("common.retry")}
-            </AppButton>
-          }
+          description={t("dataCatalog.loadErrorRefreshHint")}
           message={loadError}
           showIcon
           type="error"
@@ -520,17 +498,7 @@ export function DataCatalogScene({
     ) {
       return (
         <Alert
-          action={
-            <AppButton
-              onClick={() => {
-                setSelectedCatalogError(null);
-                void loadAll();
-              }}
-              type="link"
-            >
-              {t("common.retry")}
-            </AppButton>
-          }
+          description={t("dataCatalog.loadErrorRefreshHint")}
           message={selectedCatalogError.message}
           showIcon
           type="error"

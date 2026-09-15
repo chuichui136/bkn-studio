@@ -45,6 +45,20 @@ describe("catalog.service · listCatalogs", () => {
     expect(lastParams()).toMatchObject({ type: "physical" });
   });
 
+  it("allows a caller to suppress the global error toast for its list request", async () => {
+    const { listCatalogs } = await import("@/shared/catalog/catalog.service");
+
+    await listCatalogs(
+      { keyword: "", page: 1, pageSize: 10, type: "physical" },
+      { skipErrorToast: true },
+    );
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/vega-backend/v1/catalogs",
+      expect.objectContaining({ skipErrorToast: true }),
+    );
+  });
+
   it("keeps Vega's filtered total for physical catalog pages", async () => {
     getMock.mockResolvedValue({ data: { entries: [], total_count: 23 } });
     const { listCatalogs } = await import("@/shared/catalog/catalog.service");
@@ -147,11 +161,12 @@ describe("catalog.service · mock listCatalogs", () => {
       "finance_dw",
     ]);
     expect(secondPage.items.map((catalog) => catalog.name)).toEqual([
-      "knowledge_index",
+      "ISSUE180_IV18007_PG17_orders_archive_20260915",
+      "ISSUE180_IV18007_PG17_orders_current_20260915",
     ]);
     expect(descendingPage.items.map((catalog) => catalog.name)).toEqual([
+      "permission_limited_catalog",
       "knowledge_index",
-      "finance_dw",
     ]);
   });
 });
@@ -415,8 +430,9 @@ describe("catalog.service · mock health check schedule", () => {
       type: "physical",
     });
 
-    expect(result.items.length).toBeGreaterThan(0);
-    for (const catalog of result.items) {
+    const fullyManageableCatalogs = result.items.filter((catalog) => catalog.id !== "cat-008");
+    expect(fullyManageableCatalogs.length).toBeGreaterThan(0);
+    for (const catalog of fullyManageableCatalogs) {
       expect(catalog.operations).toEqual([
         "view_detail",
         "modify",
@@ -427,6 +443,9 @@ describe("catalog.service · mock health check schedule", () => {
         "resource_manage",
       ]);
     }
+    expect(result.items.find((catalog) => catalog.id === "cat-008")?.operations).toEqual([
+      "view_detail",
+    ]);
   });
 
   it("keeps schedule updates when the catalog is loaded again", async () => {

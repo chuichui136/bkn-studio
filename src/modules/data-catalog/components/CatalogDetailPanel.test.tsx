@@ -102,6 +102,15 @@ describe("CatalogDetailPanel authorize entry", () => {
     }));
   });
 
+  it("shows a manual refresh hint without a retry button when resources fail to load", async () => {
+    listCatalogResourcePageMock.mockRejectedValue(new Error("resources unavailable"));
+    renderPanel(catalog);
+
+    expect(await screen.findByText("resources unavailable")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+    expect(screen.getByText("dataCatalog.loadErrorRefreshHint")).toBeInTheDocument();
+  });
+
   // The bug: the button asked for admin-authz:grant, which no network_builder holds, so the person
   // who created the data connection could not share it — while bkn-safe was already accepting the
   // grant from them on /me/object-grants.
@@ -221,7 +230,126 @@ describe("CatalogDetailPanel authorize entry", () => {
     expect(onOpenResource).toHaveBeenCalledWith("resource-1", "preview");
   });
 
-  it("disables resource preview when effective operations are unavailable", async () => {
+  it("keeps the data-index entry for datasets that support index configuration", async () => {
+    const onOpenResource = vi.fn();
+    listCatalogResourcePageMock.mockResolvedValue({
+      items: [{
+        catalogId: "catalog-1",
+        category: "dataset",
+        columnCount: 1,
+        description: "",
+        expectedUpdateTime: 0,
+        id: "dataset-1",
+        localIndexStatus: "unavailable",
+        name: "orders_dataset",
+        operations: ["view_detail"],
+        rowCount: 0,
+        schema: [{ name: "order_id", type: "integer" }],
+        sourceIdentifier: "orders_dataset",
+        updateTime: "",
+      }],
+      total: 1,
+    });
+    renderPanel(catalog, onOpenResource);
+
+    fireEvent.click(await screen.findByRole("button", { name: "dataCatalog.actions.more" }));
+    fireEvent.click(await screen.findByRole("menuitem", {
+      name: "dataCatalog.actions.dataIndex",
+    }));
+
+    expect(onOpenResource).toHaveBeenCalledWith("dataset-1", "index");
+  });
+
+  it.each([
+    ["view-only", ["view_detail"]],
+    ["resource manager", ["resource_manage", "view_detail"]],
+    ["task manager", ["task_manage", "view_detail"]],
+  ])("shows the data-index entry for a %s with resource view_detail", async (_, catalogOperations) => {
+    listCatalogResourcePageMock.mockResolvedValue({
+      items: [{
+        catalogId: "catalog-1",
+        category: "table",
+        columnCount: 1,
+        description: "",
+        expectedUpdateTime: 0,
+        id: "resource-1",
+        localIndexStatus: "unavailable",
+        name: "customers",
+        operations: ["view_detail"],
+        rowCount: 0,
+        schema: [],
+        sourceIdentifier: "db.customers",
+        updateTime: "",
+      }],
+      total: 1,
+    });
+    renderPanel({ ...catalog, operations: catalogOperations });
+
+    fireEvent.click(await screen.findByRole("button", { name: "dataCatalog.actions.more" }));
+    expect(screen.getByRole("menuitem", { name: "dataCatalog.actions.dataIndex" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", {
+      name: "dataCatalog.resourceWorkspace.tabSemanticUnderstanding",
+    })).toBeInTheDocument();
+  });
+
+  it("keeps the data-index entry when the resource omits view_detail", async () => {
+    const onOpenResource = vi.fn();
+    listCatalogResourcePageMock.mockResolvedValue({
+      items: [{
+        catalogId: "catalog-1",
+        category: "table",
+        columnCount: 1,
+        description: "",
+        expectedUpdateTime: 0,
+        id: "resource-1",
+        localIndexStatus: "unavailable",
+        name: "customers",
+        operations: ["query_data"],
+        rowCount: 0,
+        schema: [],
+        sourceIdentifier: "db.customers",
+        updateTime: "",
+      }],
+      total: 1,
+    });
+    renderPanel({ ...catalog, operations: ["resource_manage", "task_manage", "view_detail"] }, onOpenResource);
+
+    fireEvent.click(await screen.findByRole("button", { name: "dataCatalog.actions.more" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "dataCatalog.actions.dataIndex" }));
+    expect(onOpenResource).toHaveBeenCalledWith("resource-1", "index");
+  });
+
+  it("keeps index configuration reachable when the resource is disabled", async () => {
+    const onOpenResource = vi.fn();
+    listCatalogResourcePageMock.mockResolvedValue({
+      items: [{
+        catalogId: "catalog-1",
+        category: "table",
+        columnCount: 1,
+        description: "",
+        enabled: false,
+        expectedUpdateTime: 0,
+        id: "resource-1",
+        localIndexStatus: "unavailable",
+        name: "customers",
+        operations: ["view_detail"],
+        rowCount: 0,
+        schema: [],
+        sourceIdentifier: "db.customers",
+        updateTime: "",
+      }],
+      total: 1,
+    });
+    renderPanel(catalog, onOpenResource);
+
+    fireEvent.click(await screen.findByRole("button", { name: "dataCatalog.actions.more" }));
+    const indexItem = screen.getByRole("menuitem", { name: "dataCatalog.actions.dataIndex" });
+    expect(indexItem).not.toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(indexItem);
+    expect(onOpenResource).toHaveBeenCalledWith("resource-1", "index");
+  });
+
+  it("hides resource preview when query_data is unavailable", async () => {
     listCatalogResourcePageMock.mockResolvedValue({
       items: [
         {
@@ -233,6 +361,37 @@ describe("CatalogDetailPanel authorize entry", () => {
           id: "resource-1",
           localIndexStatus: "none",
           name: "customers",
+          operations: ["modify", "view_detail"],
+          rowCount: 0,
+          schema: [],
+          sourceIdentifier: "db.customers",
+          updateTime: "",
+        },
+      ],
+      total: 1,
+    });
+    renderPanel(catalog);
+
+    fireEvent.click(await screen.findByRole("button", { name: "dataCatalog.actions.more" }));
+    expect(screen.queryByRole("menuitem", {
+      name: "dataCatalog.actions.preview",
+    })).not.toBeInTheDocument();
+  });
+
+  it("disables resource preview with a reason when the resource is unavailable", async () => {
+    listCatalogResourcePageMock.mockResolvedValue({
+      items: [
+        {
+          catalogId: "catalog-1",
+          category: "table",
+          columnCount: 1,
+          description: "",
+          enabled: false,
+          expectedUpdateTime: 0,
+          id: "resource-1",
+          localIndexStatus: "none",
+          name: "customers",
+          operations: ["query_data", "view_detail"],
           rowCount: 0,
           schema: [],
           sourceIdentifier: "db.customers",
@@ -248,9 +407,44 @@ describe("CatalogDetailPanel authorize entry", () => {
       name: "dataCatalog.actions.preview",
     });
 
-    expect(previewItem.getAttribute("aria-disabled")).toBe("true");
+    expect(previewItem).toHaveAttribute("aria-disabled", "true");
+    fireEvent.mouseEnter(screen.getByText("dataCatalog.actions.preview"));
+    expect(await screen.findByText("dataCatalog.actions.previewDisabledHint")).toBeInTheDocument();
     fireEvent.click(previewItem);
     expect(onOpenResource).not.toHaveBeenCalledWith("resource-1", "preview");
+  });
+
+  it("disables resource preview with a reason when the catalog is disabled", async () => {
+    listCatalogResourcePageMock.mockResolvedValue({
+      items: [
+        {
+          catalogId: "catalog-1",
+          category: "table",
+          columnCount: 1,
+          description: "",
+          expectedUpdateTime: 0,
+          id: "resource-1",
+          localIndexStatus: "none",
+          name: "customers",
+          operations: ["query_data", "view_detail"],
+          rowCount: 0,
+          schema: [],
+          sourceIdentifier: "db.customers",
+          updateTime: "",
+        },
+      ],
+      total: 1,
+    });
+    renderPanel({ ...catalog, enabled: false, status: "disabled" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "dataCatalog.actions.more" }));
+    const previewItem = await screen.findByRole("menuitem", {
+      name: "dataCatalog.actions.preview",
+    });
+
+    expect(previewItem).toHaveAttribute("aria-disabled", "true");
+    fireEvent.mouseEnter(screen.getByText("dataCatalog.actions.preview"));
+    expect(await screen.findByText("dataCatalog.gate.catalogDisabledShort")).toBeInTheDocument();
   });
 
   it("opens the shared authorization drawer for an individual data resource", async () => {

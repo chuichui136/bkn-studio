@@ -51,8 +51,12 @@ vi.mock("react-router-dom", async (importOriginal) => ({
 }));
 
 vi.mock("antd", () => ({
-  Alert: ({ action, children, message }: { action?: ReactNode; children?: ReactNode; message?: ReactNode }) => (
-    <div>{message}{children}{action}</div>
+  Alert: ({ action, children, description, message, type }: { action?: ReactNode; children?: ReactNode; description?: ReactNode; message?: ReactNode; type?: string }) => (
+    <div data-alert-type={type}>
+      {message}
+      {description ? <div>{description}</div> : null}
+      {children}{action}
+    </div>
   ),
   Input: ({ onChange, value }: { onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void; value?: string }) => (
     <input onChange={onChange} value={value} />
@@ -306,7 +310,41 @@ describe("DataConnectDiscoverScene", () => {
     });
   });
 
-  it("rejects a direct catalog route without task_manage on that catalog", async () => {
+  it("refreshes only the current schedule list without reloading the catalog or tasks", async () => {
+    render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+    await waitFor(() => expect(listSchedulesMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(listTasksMock).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "dataConnect.discoverTabSchedules" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "common.refresh" }));
+
+    await waitFor(() => expect(listSchedulesMock).toHaveBeenCalledTimes(2));
+    expect(listSchedulesMock.mock.calls[1]?.[0]).toEqual(listSchedulesMock.mock.calls[0]?.[0]);
+    expect(getCatalogMock).toHaveBeenCalledTimes(1);
+    expect(listTasksMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("opts both discover lists out of global error toasts while keeping inline failures", async () => {
+    listSchedulesMock.mockRejectedValue(new Error("schedule list unavailable"));
+    listTasksMock.mockRejectedValue(new Error("task list unavailable"));
+
+    render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    await waitFor(() => expect(listSchedulesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: "catalog-1" }),
+      { skipErrorToast: true },
+    ));
+    await waitFor(() => expect(listTasksMock).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: "catalog-1" }),
+      { skipErrorToast: true },
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "dataConnect.discoverTabSchedules" }));
+    expect(await screen.findByText("schedule list unavailable")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "dataConnect.discoverTabTasks" }));
+    expect(await screen.findByText("task list unavailable")).toBeInTheDocument();
+  });
+
+  it("keeps discover tabs reachable without task_manage and skips protected requests", async () => {
     getCatalogMock.mockResolvedValue({
       id: "catalog-1",
       name: "Orders",
@@ -315,7 +353,15 @@ describe("DataConnectDiscoverScene", () => {
 
     render(<DataConnectDiscoverScene catalogId="catalog-1" />);
 
-    expect(await screen.findByText("common.noPermission")).toBeTruthy();
+    expect(await screen.findByText("dataConnect.permissionRequired")).toHaveAttribute(
+      "data-alert-type",
+      "warning",
+    );
+    expect(screen.getByRole("button", { name: "dataConnect.discoverTabTasks" })).toBeTruthy();
+    const schedulesTab = screen.getByRole("button", { name: "dataConnect.discoverTabSchedules" });
+    expect(schedulesTab).toBeTruthy();
+    fireEvent.click(schedulesTab);
+    expect(screen.getByText("dataConnect.permissionRequired")).toBeTruthy();
     expect(listTasksMock).not.toHaveBeenCalled();
     expect(listSchedulesMock).not.toHaveBeenCalled();
   });
@@ -354,6 +400,7 @@ describe("DataConnectDiscoverScene", () => {
     });
     await waitFor(() => expect(listTasksMock).toHaveBeenCalledWith(
       expect.objectContaining({ catalogId: "catalog-2" }),
+      { skipErrorToast: true },
     ));
 
     await act(async () => {
@@ -365,7 +412,7 @@ describe("DataConnectDiscoverScene", () => {
       await firstLookup.promise;
     });
 
-    expect(screen.queryByText("common.noPermission")).toBeNull();
+    expect(screen.queryByText("dataConnect.permissionRequired")).toBeNull();
   });
 
   it("shows no permission only for a forbidden direct catalog lookup", async () => {
@@ -385,7 +432,7 @@ describe("DataConnectDiscoverScene", () => {
 
     render(<DataConnectDiscoverScene catalogId="catalog-1" />);
 
-    expect(await screen.findByText("common.noPermission")).toBeTruthy();
+    expect(await screen.findByText("dataConnect.permissionRequired")).toBeTruthy();
     expect(listTasksMock).not.toHaveBeenCalled();
     expect(listSchedulesMock).not.toHaveBeenCalled();
   });
@@ -396,10 +443,27 @@ describe("DataConnectDiscoverScene", () => {
     render(<DataConnectDiscoverScene catalogId="catalog-1" />);
 
     expect(await screen.findByText("Catalog lookup failed")).toBeTruthy();
-    expect(screen.queryByText("common.noPermission")).toBeNull();
-    expect(screen.getByRole("button", { name: "common.retry" })).toBeTruthy();
+    expect(screen.queryByText("dataConnect.permissionRequired")).toBeNull();
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+    expect(screen.getByText("dataConnect.loadErrorRefreshHint")).toBeTruthy();
     expect(listTasksMock).not.toHaveBeenCalled();
     expect(listSchedulesMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["tasks", listTasksMock],
+    ["schedules", listSchedulesMock],
+  ])("shows a manual refresh hint without a retry button for %s errors", async (tab, listMock) => {
+    listMock.mockRejectedValue(new Error(`${tab} unavailable`));
+    render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+
+    if (tab === "schedules") {
+      fireEvent.click(await screen.findByRole("button", { name: "dataConnect.discoverTabSchedules" }));
+    }
+
+    expect(await screen.findByText(`${tab} unavailable`)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+    expect(screen.getByText("dataConnect.loadErrorRefreshHint")).toBeTruthy();
   });
 
   it("refreshes the discover schedule version after an update conflict", async () => {
@@ -665,11 +729,13 @@ describe("DataConnectDiscoverScene", () => {
     const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
     await waitFor(() => expect(listTasksMock).toHaveBeenCalledWith(
       expect.objectContaining({ catalogId: "catalog-1" }),
+      { skipErrorToast: true },
     ));
 
     view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
     await waitFor(() => expect(listTasksMock).toHaveBeenCalledWith(
       expect.objectContaining({ catalogId: "catalog-2" }),
+      { skipErrorToast: true },
     ));
     await act(async () => {
       secondTasks.resolve({ items: [task("catalog-2", "task-new")], total: 1 });
@@ -684,5 +750,30 @@ describe("DataConnectDiscoverScene", () => {
 
     expect(screen.queryByText("task-stale")).toBeNull();
     expect(screen.getByText("task-new")).toBeTruthy();
+  });
+
+  it("does not show an older task-list error after changing catalogs", async () => {
+    const oldTasks = deferred<{ items: ReturnType<typeof task>[]; total: number }>();
+    listTasksMock.mockImplementation(({ catalogId }: { catalogId?: string }) =>
+      catalogId === "catalog-1"
+        ? oldTasks.promise
+        : Promise.resolve({ items: [task("catalog-2", "task-new")], total: 1 }),
+    );
+
+    const view = render(<DataConnectDiscoverScene catalogId="catalog-1" />);
+    await waitFor(() => expect(listTasksMock).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: "catalog-1" }),
+      { skipErrorToast: true },
+    ));
+
+    view.rerender(<DataConnectDiscoverScene catalogId="catalog-2" />);
+    expect(await screen.findByText("task-new")).toBeInTheDocument();
+
+    await act(async () => {
+      oldTasks.reject(new Error("outdated task request failed"));
+      await oldTasks.promise.catch(() => undefined);
+    });
+    expect(screen.queryByText("outdated task request failed")).toBeNull();
+    expect(screen.getByText("task-new")).toBeInTheDocument();
   });
 });

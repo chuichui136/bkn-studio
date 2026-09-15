@@ -40,8 +40,6 @@ import {
   parseSemanticUnderstandingSampleRowsInput,
 } from "./semantic-understanding-task-validation";
 
-const useMock = import.meta.env.VITE_USE_MOCK !== "false";
-
 function formatTime(value: number) {
   if (!value) return "-";
   return formatDateTimeYmdHms(value < 100_000_000_000 ? value * 1000 : value);
@@ -86,6 +84,7 @@ export function ResourceSemanticUnderstandingPanel({
   const canQueryData = hasCatalogResourceOperation(resource, "query_data");
 
   const loadPage = useCallback(async (targetPage: number, targetPageSize: number) => {
+    if (!canManageTasks) return;
     const requestId = ++pageRequestIdRef.current;
     setLoading(true);
     setError(null);
@@ -112,9 +111,10 @@ export function ResourceSemanticUnderstandingPanel({
         setLoading(false);
       }
     }
-  }, [appliedFilter, applyModeFilter, direction, resource.id, sort, statusFilter]);
+  }, [appliedFilter, applyModeFilter, canManageTasks, direction, resource.id, sort, statusFilter]);
 
   const loadSummary = useCallback(async () => {
+    if (!canManageTasks) return;
     const requestId = ++summaryRequestIdRef.current;
     setSummaryError(null);
     const baseFilters = {
@@ -141,7 +141,7 @@ export function ResourceSemanticUnderstandingPanel({
         setSummaryError(extractRequestErrorMessage(e));
       }
     }
-  }, [resource.id]);
+  }, [canManageTasks, resource.id]);
 
   useEffect(() => {
     if (!resourceChanged) return;
@@ -160,26 +160,17 @@ export function ResourceSemanticUnderstandingPanel({
   }, [resource.id, resourceChanged]);
 
   useEffect(() => {
-    if (active && !resourceChanged) void loadPage(page, pageSize);
-  }, [active, loadPage, page, pageSize, resourceChanged]);
+    if (active && canManageTasks && !resourceChanged) void loadPage(page, pageSize);
+  }, [active, canManageTasks, loadPage, page, pageSize, resourceChanged]);
 
   useEffect(() => {
-    if (active && !resourceChanged) void loadSummary();
-  }, [active, loadSummary, resourceChanged]);
+    if (active && canManageTasks && !resourceChanged) void loadSummary();
+  }, [active, canManageTasks, loadSummary, resourceChanged]);
 
   useEffect(() => {
     const lastPage = Math.max(1, Math.ceil(total / pageSize));
     if (page > lastPage) setPage(lastPage);
   }, [page, pageSize, total]);
-
-  useEffect(() => {
-    if (useMock || !active || !tasks.some((task) => task.status === "pending" || task.status === "running")) return;
-    const timer = window.setInterval(() => {
-      void loadPage(page, pageSize);
-      void loadSummary();
-    }, 10_000);
-    return () => window.clearInterval(timer);
-  }, [active, loadPage, loadSummary, page, pageSize, tasks]);
 
   const summary = summaryTask;
   const summaryPresentation =
@@ -331,6 +322,10 @@ export function ResourceSemanticUnderstandingPanel({
       },
     },
   ];
+
+  if (!canManageTasks) {
+    return <Alert message={t("dataCatalog.permissionRequired")} showIcon type="warning" />;
+  }
 
   return <div className={styles.root}>
     <section className={styles.summaryCard}>

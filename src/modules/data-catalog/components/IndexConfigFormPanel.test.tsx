@@ -5,7 +5,8 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { AxiosError, AxiosHeaders } from "axios";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -156,7 +157,164 @@ describe("IndexConfigFormPanel", () => {
       resourceId: resource.id,
       sort: "create_time",
       statuses: ["pending", "running", "stopping"],
+    }, { skipErrorToast: true }));
+  });
+
+  it("keeps configuration editing locked when task status cannot be loaded", async () => {
+    listBuildTaskPageMock.mockRejectedValue(new Error("task status unavailable"));
+    render(
+      <MemoryRouter>
+        <IndexConfigFormPanel active canViewTasks resource={resource} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("dataCatalog.resourceWorkspace.taskStatusUnavailable")).toBeInTheDocument();
+    expect(listBuildTaskPageMock).toHaveBeenCalledWith({
+      direction: "desc",
+      limit: 1,
+      resourceId: resource.id,
+      sort: "create_time",
+      statuses: ["pending", "running", "stopping"],
+    }, { skipErrorToast: true });
+    expect(screen.getByRole("button", { name: "dataCatalog.build.saveIndexConfig" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "dataCatalog.build.saveIndexConfig" }));
+    expect(updateCatalogResourceMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps configuration editing locked until task status is confirmed", () => {
+    listBuildTaskPageMock.mockImplementation(() => new Promise(() => undefined));
+    render(
+      <MemoryRouter>
+        <IndexConfigFormPanel active canViewTasks resource={resource} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "dataCatalog.build.saveIndexConfig" })).toBeDisabled();
+  });
+
+  it("checks task status before editing when task access becomes available", async () => {
+    listBuildTaskPageMock.mockImplementation(() => new Promise(() => undefined));
+    const { rerender } = render(
+      <MemoryRouter>
+        <IndexConfigFormPanel active canViewTasks={false} resource={resource} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByRole("button", {
+      name: "dataCatalog.build.saveIndexConfig",
+    })).toBeEnabled());
+
+    rerender(
+      <MemoryRouter>
+        <IndexConfigFormPanel active canViewTasks resource={resource} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "dataCatalog.build.saveIndexConfig" })).toBeDisabled();
+    await waitFor(() => expect(listBuildTaskPageMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not query task history without task_manage but keeps configuration editable", async () => {
+    updateCatalogResourceMock.mockResolvedValue(resource);
+    render(
+      <MemoryRouter>
+        <IndexConfigFormPanel active canViewTasks={false} resource={resource} />
+      </MemoryRouter>,
+    );
+
+    expect(listBuildTaskPageMock).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", {
+      name: "dataCatalog.build.saveIndexConfig",
     }));
+    await waitFor(() => expect(updateCatalogResourceMock).toHaveBeenCalledTimes(1));
+  });
+
+  it.each([
+    ["VegaBackend.BuildTask.Exist", "dataCatalog.build.activeTaskLocked"],
+    ["VegaBackend.BuildTask.HasRunningExecution", "dataCatalog.build.activeTaskLocked"],
+    ["VegaBackend.Resource.UpdateConflict", "dataCatalog.build.configConflict"],
+  ])("reports backend conflict %s with the appropriate message", async (code, expectedMessage) => {
+    const conflictError = new AxiosError(
+      "Build task running",
+      undefined,
+      undefined,
+      undefined,
+      {
+        config: { headers: new AxiosHeaders() },
+        data: {
+          description: "A build task is running",
+          error_code: code,
+        },
+        headers: new AxiosHeaders(),
+        status: 409,
+        statusText: "Conflict",
+      },
+    );
+    updateCatalogResourceMock.mockRejectedValue(conflictError);
+    render(
+      <MemoryRouter>
+        <IndexConfigFormPanel active canViewTasks={false} resource={resource} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", {
+      name: "dataCatalog.build.saveIndexConfig",
+    }));
+    await waitFor(() => expect(updateCatalogResourceMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(
+      [...document.querySelectorAll(".ant-alert")].map((node) => node.textContent),
+    ).toContain(expectedMessage));
+    expect(screen.queryByText(expectedMessage === "dataCatalog.build.configConflict"
+      ? "dataCatalog.build.activeTaskLocked"
+      : "dataCatalog.build.configConflict")).toBeNull();
+  });
+
+  it("drops an in-flight task result when task_manage is revoked", async () => {
+    let resolveTasks: ((value: { items: BuildTask[]; total: number }) => void) | null = null;
+    listBuildTaskPageMock.mockImplementation(() => new Promise((resolve) => {
+      resolveTasks = resolve;
+    }));
+    const { rerender } = render(
+      <MemoryRouter>
+        <IndexConfigFormPanel active canViewTasks resource={resource} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(listBuildTaskPageMock).toHaveBeenCalledTimes(1));
+    rerender(
+      <MemoryRouter>
+        <IndexConfigFormPanel active canViewTasks={false} resource={resource} />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      resolveTasks?.({
+        items: [{
+          createTime: 1,
+          embeddingFields: [],
+          embeddingModel: "",
+          error: null,
+          finishTime: null,
+          fulltextAnalyzer: "",
+          fulltextFields: [],
+          id: "task-1",
+          incrementalFields: [],
+          lastProgressTime: null,
+          mode: "batch",
+          modelDimensions: 0,
+          primaryKeyFields: [],
+          resourceId: resource.id,
+          startTime: 1,
+          status: "running",
+          syncedCount: 0,
+          totalCount: 1,
+        } satisfies BuildTask],
+        total: 1,
+      });
+      await Promise.resolve();
+    });
+
+    expect(listBuildTaskPageMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("dataCatalog.build.activeTaskLocked")).toBeNull();
+    expect(screen.getByRole("button", { name: "dataCatalog.build.saveIndexConfig" })).toBeEnabled();
   });
 
   it("allows saving a string resource with only its required keyword feature", async () => {
@@ -168,9 +326,11 @@ describe("IndexConfigFormPanel", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", {
+    const saveButton = await screen.findByRole("button", {
       name: "dataCatalog.build.saveIndexConfig",
-    }));
+    });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
 
     await waitFor(() => expect(updateCatalogResourceMock).toHaveBeenCalledTimes(1));
     const [, payload] = updateCatalogResourceMock.mock.calls[0] as [string, ResourceUpdateInput];
@@ -327,18 +487,31 @@ describe("IndexConfigFormPanel", () => {
     expect(payload.indexConfig?.incrementalFields).toBeUndefined();
   });
 
-  it("does not submit index configuration when read-only", async () => {
+  it("does not submit index configuration when read-only", () => {
     render(
       <MemoryRouter>
-        <IndexConfigFormPanel active readOnly resource={resource} />
+        <IndexConfigFormPanel
+          active
+          readOnly
+          resource={{
+            ...resource,
+            indexConfig: { primaryKeyFields: ["missing_field"] },
+          }}
+        />
       </MemoryRouter>,
     );
 
-    const saveButton = await screen.findByRole("button", {
+    expect(screen.queryByRole("button", {
       name: "dataCatalog.build.saveIndexConfig",
-    });
-    expect(saveButton.getAttribute("disabled")).not.toBeNull();
-    fireEvent.click(saveButton);
+    })).toBeNull();
+    expect(screen.queryByRole("button", {
+      name: "dataCatalog.build.featureConfig",
+    })).toBeNull();
+    expect(screen.queryByRole("button", {
+      name: "dataCatalog.build.removeInvalidKeyFields",
+    })).toBeNull();
+    expect(screen.queryByText("dataCatalog.build.activeTaskLocked")).toBeNull();
+    expect(listBuildTaskPageMock).not.toHaveBeenCalled();
     expect(updateCatalogResourceMock).not.toHaveBeenCalled();
   });
 
@@ -701,7 +874,7 @@ describe("IndexConfigFormPanel", () => {
     ).toBeNull();
   });
 
-  it("retries analyzer capability loading for full-text resources", async () => {
+  it("asks for a page refresh without a retry button when analyzer loading fails", async () => {
     const fulltextResource: CatalogResource = {
       ...resource,
       schema: [{
@@ -723,12 +896,55 @@ describe("IndexConfigFormPanel", () => {
       </MemoryRouter>,
     );
 
-    const retryButton = await screen.findByRole("button", { name: "dataCatalog.build.retryLoadAnalyzers" });
-    fireEvent.click(retryButton);
-    await waitFor(() => expect(loadAnalyzerCapabilitiesMock).toHaveBeenCalledTimes(2));
-    await waitFor(() => {
-      expect(screen.queryAllByText("dataCatalog.build.analyzersLoading")).toHaveLength(0);
-      expect(screen.queryByRole("button", { name: "dataCatalog.build.retryLoadAnalyzers" })).toBeNull();
+    await screen.findAllByText("dataCatalog.build.analyzersLoadError");
+    expect(loadAnalyzerCapabilitiesMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "dataCatalog.build.retryLoadAnalyzers" })).toBeNull();
+    expect(screen.getAllByText("dataCatalog.resourceWorkspace.loadErrorRefreshHint")).not.toHaveLength(0);
+  });
+
+  it("asks for a page refresh without an action button when model loading fails", async () => {
+    const vectorResource: CatalogResource = {
+      ...resource,
+      schema: [{
+        features: [{ config: { embedding_model: "model-1" }, featureType: "vector" }],
+        name: "title",
+        type: "string",
+      }],
+    };
+    loadEmbeddingModelOptionsMock.mockResolvedValue({
+      errorMessage: "models unavailable",
+      options: [],
+      state: "error",
     });
+
+    render(
+      <MemoryRouter>
+        <IndexConfigFormPanel active resource={vectorResource} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(loadEmbeddingModelOptionsMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: "dataCatalog.build.retryLoadModels" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "dataCatalog.build.goConnectModel" })).toBeNull();
+    expect(screen.getAllByText("dataCatalog.resourceWorkspace.loadErrorRefreshHint")).not.toHaveLength(0);
+  });
+
+  it("keeps the model management action when no embedding models are available", async () => {
+    loadEmbeddingModelOptionsMock.mockResolvedValue({
+      errorMessage: null,
+      options: [],
+      state: "empty",
+    });
+
+    render(
+      <MemoryRouter>
+        <IndexConfigFormPanel active resource={resource} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("dataCatalog.build.noModels")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "dataCatalog.build.goConnectModel" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "dataCatalog.build.retryLoadModels" })).toBeNull();
+    expect(screen.queryAllByText("dataCatalog.resourceWorkspace.loadErrorRefreshHint")).toHaveLength(0);
   });
 });

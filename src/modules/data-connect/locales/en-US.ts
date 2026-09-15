@@ -10,6 +10,9 @@ export const dataConnectEnUS = {
     title: "Data Connection",
     description:
       "Manage connector instances provided by the Vega backend within the BKN platform console.",
+    permissionRequired:
+      "Your account does not have the required permission. Contact an administrator to request access.",
+    loadErrorRefreshHint: "Please refresh the page and try again later.",
     createTitle: "Create Data Connection",
     editTitle: "Edit Data Connection",
     createDescription:
@@ -135,7 +138,6 @@ export const dataConnectEnUS = {
       "Manage scheduled discovery plans and review recent discover tasks for data connections.",
     discoverToolbarHint:
       "Schedules use Vega backend discover-schedules, and recent executions come from discover-tasks.",
-    discoverAutoRefreshHint: "Active tasks are refreshing automatically.",
     discoverCurrentConnection: "Current connection",
     discoverScheduleEnableConfirmTitle: "Enable discover schedule",
     discoverScheduleEnableConfirmDescription: 'Enable schedule "{{name}}"?',
@@ -196,7 +198,6 @@ export const dataConnectEnUS = {
     discoverTaskTableTitle: "Recent Tasks",
     discoverSelectedSchedule: 'Current schedule filter: "{{name}}"',
     discoverClearSelection: "Clear Filter",
-    discoverTaskAutoRefreshing: "Active tasks are auto-refreshing.",
     discoverScheduleEmpty: "No discover plans",
     discoverScheduleEmptyDescription:
       "Create the first discover plan for a data connection and then review task history here.",

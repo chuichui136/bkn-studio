@@ -70,7 +70,6 @@ import taskStyles from "@/framework/ui/common/TaskDetailDrawer.module.css";
 
 import styles from "./DataConnectDiscoverScene.module.css";
 
-const useMock = import.meta.env.VITE_USE_MOCK !== "false";
 type ScheduleModalState =
   | { mode: "create"; scheduleId?: undefined }
   | { mode: "edit"; scheduleId: string }
@@ -232,10 +231,6 @@ export function DataConnectDiscoverScene({
     !catalogAccessDenied,
   );
 
-  const hasActiveTasks = useMemo(
-    () => tasks.some((item) => item.status === "pending" || item.status === "running"),
-    [tasks],
-  );
   const activeTaskCount = useMemo(
     () =>
       tasks.filter((item) => item.status === "pending" || item.status === "running")
@@ -290,7 +285,7 @@ export function DataConnectDiscoverScene({
         keyword: debouncedKeyword,
         page: schedulePage,
         pageSize: schedulePageSize,
-      });
+      }, { skipErrorToast: true });
       if (!isCurrentRequest()) return;
       setSchedules(result.items);
       setScheduleTotal(result.total);
@@ -327,7 +322,7 @@ export function DataConnectDiscoverScene({
         strategy: taskStrategyFilter,
         triggerType:
           taskTriggerTypeFilter === "all" ? undefined : taskTriggerTypeFilter,
-      });
+      }, { skipErrorToast: true });
       if (!isCurrentRequest()) return;
       setTasks(result.items);
       setTaskTotal(result.total);
@@ -451,20 +446,6 @@ export function DataConnectDiscoverScene({
       void loadTasks();
     }
   }, [catalogAccessConfirmed, loadTasks]);
-
-  useEffect(() => {
-    if (useMock || !hasActiveTasks) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      void Promise.all([loadSchedules(), loadTasks()]);
-    }, 8000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [hasActiveTasks, loadSchedules, loadTasks]);
 
   const scheduleColumns: ColumnsType<DataConnectDiscoverSchedule> = [
     {
@@ -886,7 +867,7 @@ export function DataConnectDiscoverScene({
             <AppButton
               icon={<ReloadOutlined />}
               onClick={() => {
-                void Promise.all([loadSchedules(), loadCatalogs()]);
+                void loadSchedules();
               }}
             >
               {t("common.refresh")}
@@ -930,16 +911,7 @@ export function DataConnectDiscoverScene({
       <TableSurface className={styles.panelSection}>
         {scheduleError ? (
           <Alert
-            action={
-              <AppButton
-                onClick={() => {
-                  void loadSchedules();
-                }}
-                type="link"
-              >
-                {t("common.retry")}
-              </AppButton>
-            }
+            description={t("dataConnect.loadErrorRefreshHint")}
             message={scheduleError}
             showIcon
             type="error"
@@ -1023,24 +995,12 @@ export function DataConnectDiscoverScene({
               </AppButton>
             </PermissionGate>
           </div>
-          {!useMock && hasActiveTasks ? (
-            <span className={styles.inlineHint}>{t("dataConnect.discoverAutoRefreshHint")}</span>
-          ) : null}
         </div>
       </div>
       <TableSurface className={styles.panelSection}>
         {taskError ? (
           <Alert
-            action={
-              <AppButton
-                onClick={() => {
-                  void loadTasks();
-                }}
-                type="link"
-              >
-                {t("common.retry")}
-              </AppButton>
-            }
+            description={t("dataConnect.loadErrorRefreshHint")}
             message={taskError}
             showIcon
             type="error"
@@ -1088,6 +1048,12 @@ export function DataConnectDiscoverScene({
     </div>
   );
 
+  const permissionDeniedPanel = (
+    <div className={styles.tabPanel}>
+      <Alert message={t("dataConnect.permissionRequired")} showIcon type="warning" />
+    </div>
+  );
+
   return (
     <>
       <section className={styles.contentSurface}>
@@ -1110,19 +1076,13 @@ export function DataConnectDiscoverScene({
         />
         {catalogError ? (
           <Alert
-            action={(
-              <AppButton onClick={() => void loadCatalogs()} type="link">
-                {t("common.retry")}
-              </AppButton>
-            )}
+            description={t("dataConnect.loadErrorRefreshHint")}
             message={catalogError}
             showIcon
             type="warning"
           />
         ) : null}
-        {catalogAccessDenied ? (
-          <Alert message={t("common.noPermission")} showIcon type="error" />
-        ) : catalogError ? null : (
+        {catalogError ? null : (
           <Tabs
             activeKey={activeTab}
             className={styles.pageTabs}
@@ -1133,12 +1093,12 @@ export function DataConnectDiscoverScene({
                   activeTaskCount > 0
                     ? `${t("dataConnect.discoverTabTasks")} (${activeTaskCount})`
                     : t("dataConnect.discoverTabTasks"),
-                children: tasksPanel,
+                children: catalogAccessDenied ? permissionDeniedPanel : tasksPanel,
               },
               {
                 key: "schedules",
                 label: t("dataConnect.discoverTabSchedules"),
-                children: schedulesPanel,
+                children: catalogAccessDenied ? permissionDeniedPanel : schedulesPanel,
               },
             ]}
             onChange={(key) => {

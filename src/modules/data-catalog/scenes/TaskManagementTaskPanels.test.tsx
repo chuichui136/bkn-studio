@@ -5,9 +5,9 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   listCatalogsMock,
@@ -60,7 +60,24 @@ import {
   SemanticUnderstandingTaskListPanel,
 } from "./TaskManagementTaskPanels";
 
+function runningTask(kind: "discover" | "semantic") {
+  return kind === "discover" ? {
+    catalogId: "catalog-1", createTime: 1, creatorName: "User", id: "running-task",
+    progress: 10, queuePriority: 20, status: "running", strategy: "full",
+    triggerType: "manual",
+  } : {
+    agentId: "agent-1", applied: false, applyMode: "dry_run", catalogId: "catalog-1",
+    confidence: 0, confidenceThreshold: 0.8, createTime: 1,
+    creator: { id: "user-1", type: "user" }, id: "running-task", scope: "catalog",
+    status: "running",
+  };
+}
+
 describe("TaskManagementTaskPanels", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     listCatalogsMock.mockResolvedValue({ items: [], total: 0 });
@@ -99,5 +116,60 @@ describe("TaskManagementTaskPanels", () => {
 
     await waitFor(() => expect(listSemanticUnderstandingTasksMock).toHaveBeenCalled());
     expect(screen.getAllByText("dataCatalog.taskManagement.semantic.empty")).toHaveLength(1);
+  });
+
+  it.each([
+    ["discover", DiscoverTaskListPanel, listDataConnectDiscoverTasksMock],
+    ["semantic", SemanticUnderstandingTaskListPanel, listSemanticUnderstandingTasksMock],
+  ])("shows a manual refresh hint without a retry button for %s task errors", async (_, Panel, listMock) => {
+    listMock.mockRejectedValue(new Error("tasks unavailable"));
+    render(
+      <MemoryRouter>
+        <Panel />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("tasks unavailable")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+    expect(screen.getByText("dataCatalog.loadErrorRefreshHint")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["discover", DiscoverTaskListPanel, listDataConnectDiscoverTasksMock],
+    ["semantic", SemanticUnderstandingTaskListPanel, listSemanticUnderstandingTasksMock],
+  ])("ignores an outdated %s task failure after refresh", async (_, Panel, listMock) => {
+    let rejectOlder!: (reason: Error) => void;
+    const older = new Promise((_, reject) => { rejectOlder = reject; });
+    listMock.mockReturnValueOnce(older).mockResolvedValueOnce({ items: [], total: 0 });
+    render(<MemoryRouter><Panel /></MemoryRouter>);
+
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: /common\.refresh/ }));
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      rejectOlder(new Error("outdated failure"));
+      await older.catch(() => {});
+    });
+
+    await waitFor(() => expect(screen.queryByText("outdated failure")).toBeNull());
+  });
+
+  it.each(["discover", "semantic"] as const)("does not schedule automatic refresh for a running %s task", async (kind) => {
+    vi.resetModules();
+    vi.stubEnv("VITE_USE_MOCK", "false");
+    const setIntervalSpy = vi.spyOn(window, "setInterval");
+    const { DiscoverTaskListPanel: LiveDiscover, SemanticUnderstandingTaskListPanel: LiveSemantic } = await import(
+      "./TaskManagementTaskPanels"
+    );
+    const listMock = kind === "discover"
+      ? listDataConnectDiscoverTasksMock
+      : listSemanticUnderstandingTasksMock;
+    listMock.mockResolvedValue({ items: [runningTask(kind)], total: 1 });
+    const Panel = kind === "discover" ? LiveDiscover : LiveSemantic;
+    render(<MemoryRouter><Panel /></MemoryRouter>);
+
+    expect(await screen.findByText("running-task")).toBeInTheDocument();
+    expect(setIntervalSpy).not.toHaveBeenCalledWith(expect.any(Function), 10_000);
+    expect(listMock).toHaveBeenCalledTimes(1);
   });
 });

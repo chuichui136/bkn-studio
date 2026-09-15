@@ -119,7 +119,6 @@ export function CatalogDetailPanel({
   const [resourceTotal, setResourceTotal] = useState(0);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [resourceLoadError, setResourceLoadError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
   const [authorizeOpen, setAuthorizeOpen] = useState(false);
   const [authorizeResource, setAuthorizeResource] = useState<CatalogResource | null>(null);
   const [nameColumnWidth, setNameColumnWidth] = useState(() => {
@@ -197,7 +196,7 @@ export function CatalogDetailPanel({
     return () => {
       cancelled = true;
     };
-  }, [activeSchema, catalog.id, categoryFilter, page, pageSize, reloadKey, resourceKeyword]);
+  }, [activeSchema, catalog.id, categoryFilter, page, pageSize, resourceKeyword]);
 
   useEffect(() => {
     const handleMove = (event: MouseEvent) => {
@@ -381,7 +380,6 @@ export function CatalogDetailPanel({
         // checked after the resource detail has been loaded; list actions only use known states.
         const queryBlockReason = resourceQueryBlockReason(record, null);
         const previewDisabled = blockedByDisabledCatalog || queryBlockReason !== null;
-        const indexDisabled = blockedByDisabledCatalog || queryBlockReason !== null;
         const previewLabel = t("dataCatalog.actions.preview");
         const indexLabel = t("dataCatalog.actions.dataIndex");
         const moreItems: NonNullable<MenuProps["items"]> = [
@@ -389,51 +387,36 @@ export function CatalogDetailPanel({
             key: "detail",
             label: t("common.detail"),
           },
-          {
-            disabled: previewDisabled || !hasCatalogResourceOperation(record, "query_data"),
+        ];
+        if (hasCatalogResourceOperation(record, "query_data")) {
+          moreItems.push({
+            disabled: previewDisabled,
             key: "preview",
-            label: queryBlockReason ? (
+            label: previewDisabled ? (
               <Tooltip
-                title={t(
-                  queryBlockReason === "missing"
-                    ? "dataCatalog.actions.previewMissingHint"
-                    : queryBlockReason === "disabled"
-                      ? "dataCatalog.actions.previewDisabledHint"
-                      : queryBlockReason === "stale"
-                        ? "dataCatalog.actions.previewStaleHint"
-                        : "dataCatalog.actions.previewMetadataUnavailableHint",
-                )}
+                title={blockedByDisabledCatalog
+                  ? t("dataCatalog.gate.catalogDisabledShort")
+                  : t(
+                    queryBlockReason === "missing"
+                      ? "dataCatalog.actions.previewMissingHint"
+                      : queryBlockReason === "disabled"
+                        ? "dataCatalog.actions.previewDisabledHint"
+                        : queryBlockReason === "stale"
+                          ? "dataCatalog.actions.previewStaleHint"
+                          : "dataCatalog.actions.previewMetadataUnavailableHint",
+                  )}
               >
                 <span>{previewLabel}</span>
               </Tooltip>
             ) : (
               previewLabel
             ),
-          },
-        ];
-        if (canManageResourceTasks) {
-          moreItems.push({
-            disabled: indexDisabled,
-            key: "index",
-            label: queryBlockReason ? (
-              <Tooltip
-                title={t(
-                  queryBlockReason === "missing"
-                    ? "dataCatalog.actions.indexMissingHint"
-                    : queryBlockReason === "disabled"
-                      ? "dataCatalog.actions.indexDisabledHint"
-                      : queryBlockReason === "stale"
-                        ? "dataCatalog.actions.indexStaleHint"
-                        : "dataCatalog.actions.indexMetadataUnavailableHint",
-                )}
-              >
-                <span>{indexLabel}</span>
-              </Tooltip>
-            ) : (
-              indexLabel
-            ),
           });
         }
+        moreItems.push({
+          key: "index",
+          label: indexLabel,
+        });
         if (!catalog.internal && canAuthorizeGrants) {
           // 读这张表的数据是表一级的授权,和目录一级的管理动词分开(bkn-foundry#986)。
           moreItems.push({
@@ -449,7 +432,7 @@ export function CatalogDetailPanel({
             ),
           });
         }
-        if (!catalog.internal && canManageResourceTasks) {
+        if (!catalog.internal) {
           moreItems.push({
             key: "semantic-understanding",
             label: t("dataCatalog.resourceWorkspace.tabSemanticUnderstanding"),
@@ -563,11 +546,7 @@ export function CatalogDetailPanel({
           </div>
         ) : resourceLoadError ? (
           <Alert
-            action={
-              <AppButton onClick={() => setReloadKey((value) => value + 1)} type="link">
-                {t("common.retry")}
-              </AppButton>
-            }
+            description={t("dataCatalog.loadErrorRefreshHint")}
             message={resourceLoadError}
             showIcon
             type="error"

@@ -13,7 +13,7 @@ import {
 } from "@ant-design/icons";
 import { Alert, Dropdown, Space, Tooltip, type MenuProps } from "antd";
 import type { ColumnsType, TableProps } from "antd/es/table";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -62,7 +62,6 @@ const STATUS_OPTIONS: BuildTaskStatus[] = [
   "failed",
   "cancelled",
 ];
-const useMock = import.meta.env.VITE_USE_MOCK !== "false";
 
 function EllipsisText({ text, title }: { text: string; title?: string }) {
   return (
@@ -92,6 +91,7 @@ export function IndexBuildListScene() {
   const [total, setTotal] = useState(0);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const taskRequestIdRef = useRef(0);
   const canManageResourceTasks = hasPermissions({
     currentPermissions: runtimeConfig.currentUser.permissions,
     requiredPermissions: "catalog:task_manage",
@@ -134,50 +134,32 @@ export function IndexBuildListScene() {
   );
 
   const loadTasks = useCallback(async () => {
+    const requestId = ++taskRequestIdRef.current;
     setLoading(true);
     setLoadError(null);
     try {
-      const result = await listBuildTaskPage(taskQuery);
-      setTasks(result.items);
-      setTotal(result.total);
+      const result = await listBuildTaskPage(taskQuery, { skipErrorToast: true });
+      if (requestId === taskRequestIdRef.current) {
+        setTasks(result.items);
+        setTotal(result.total);
+      }
     } catch (error) {
-      setLoadError(extractRequestErrorMessage(error));
+      if (requestId === taskRequestIdRef.current) {
+        setLoadError(extractRequestErrorMessage(error));
+      }
     } finally {
-      setLoading(false);
-    }
-  }, [taskQuery]);
-
-  // Poll only tasks on the current page to prevent request volume growing with resource count.
-  const refreshTasksSilently = useCallback(async () => {
-    try {
-      const result = await listBuildTaskPage(taskQuery);
-      setTasks(result.items);
-      setTotal(result.total);
-    } catch {
-      // Retain existing data when polling fails and wait for the next cycle.
+      if (requestId === taskRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [taskQuery]);
 
   useEffect(() => {
     void loadTasks();
+    return () => { taskRequestIdRef.current += 1; };
   }, [loadTasks]);
 
   useEffect(() => subscribeMockDb(() => void loadTasks()), [loadTasks]);
-
-  const hasActive = useMemo(() => tasks.some(isActiveBuildTask), [tasks]);
-
-  useEffect(() => {
-    if (useMock || !hasActive) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      if (document.hidden) {
-        return;
-      }
-      void refreshTasksSilently();
-    }, 10_000);
-    return () => window.clearInterval(timer);
-  }, [hasActive, refreshTasksSilently]);
 
   const { pauseOrResume: handlePauseResume, remove: handleDelete, retry: handleRetry } =
     useBuildTaskActions(loadTasks);
@@ -461,11 +443,7 @@ export function IndexBuildListScene() {
       <TableSurface className={sceneStyles.tableSurface}>
         {loadError ? (
           <Alert
-            action={
-              <AppButton onClick={() => void loadTasks()} type="link">
-                {t("common.retry")}
-              </AppButton>
-            }
+            description={t("dataCatalog.loadErrorRefreshHint")}
             message={loadError}
             showIcon
             type="error"
