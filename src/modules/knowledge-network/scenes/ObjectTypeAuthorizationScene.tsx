@@ -88,7 +88,7 @@ import {
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
 } from "@/modules/system-admin/utils/object-grant-guards";
-import { operationsForType } from "@/modules/system-admin/utils/resource-catalog";
+import { useAuthorizationCatalog } from "@/modules/system-admin/hooks/use-authorization-catalog";
 
 import styles from "./ObjectTypeAuthorizationScene.module.css";
 
@@ -145,6 +145,7 @@ export function ObjectTypeAuthorizationScene() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { message, modal, runtimeConfig } = useAppServices();
+  const { catalogLoading, operationsForType } = useAuthorizationCatalog();
   const { networkId = "", objectTypeId = "" } = useParams<{
     networkId: string;
     objectTypeId: string;
@@ -585,7 +586,7 @@ export function ObjectTypeAuthorizationScene() {
         !HIDDEN_INSTANCE_OPS.has(operation.key) &&
         (operation.key !== "authorize" || isAdminGrantor),
     ),
-    [isAdminGrantor],
+    [isAdminGrantor, operationsForType],
   );
   const candidateRequirements = useMemo(
     () => baseOps.flatMap((requirement) => {
@@ -598,25 +599,6 @@ export function ObjectTypeAuthorizationScene() {
     }),
     [baseOps, candidateOperations],
   );
-  const normalizeCandidateOperations = (operations: string[]) => {
-    const selected = new Set(operations);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const operation of baseOps) {
-        if (!selected.has(operation.key)) {
-          continue;
-        }
-        for (const requirement of operation.requires) {
-          if (!selected.has(requirement)) {
-            selected.add(requirement);
-            changed = true;
-          }
-        }
-      }
-    }
-    return baseOps.filter((operation) => selected.has(operation.key)).map((operation) => operation.key);
-  };
 
   const isProtectedBaseGrant = (grant: ObjectGrant) =>
     (!isPlatformAuthzAdmin && isDelegateProtectedGrant(grant)) ||
@@ -643,17 +625,6 @@ export function ObjectTypeAuthorizationScene() {
   const candidateManagedOperations = new Set(
     candidateManagedSources.map((source) => source.operation),
   );
-  const candidateMissingManagedRequirements = baseOps.flatMap((operation) =>
-    candidateManagedOperations.has(operation.key)
-      ? operation.requires.flatMap((requirementKey) => {
-          if (candidateManagedOperations.has(requirementKey)) {
-            return [];
-          }
-          const requirement = baseOps.find(({ key }) => key === requirementKey);
-          return requirement ? [{ operation, requirement }] : [];
-        })
-      : [],
-  );
   const candidateHasDuplicateManagedOperations =
     candidateManagedSources.length !== candidateManagedOperations.size;
   const candidateWriteLocked = candidateGrant ? isProtectedBaseGrant(candidateGrant) : false;
@@ -675,7 +646,7 @@ export function ObjectTypeAuthorizationScene() {
           source.authoritySource === candidateAuthoritySource,
       )
       .map((source) => source.operation))];
-    setCandidateOperations(normalizeCandidateOperations(directOperations));
+    setCandidateOperations(directOperations.length ? directOperations : grant?.operations ?? []);
   };
 
   const toggleCandidateOperation = (operationKey: string) => {
@@ -1096,7 +1067,7 @@ export function ObjectTypeAuthorizationScene() {
               <span>{t("systemAdmin.objectGrants.grantOperationsLabel")}</span>
               <div>
                 <AppButton
-                  disabled={candidateOperations.length === baseOps.length}
+                  disabled={catalogLoading || candidateOperations.length === baseOps.length}
                   onClick={() => setCandidateOperations(baseOps.map((operation) => operation.key))}
                   size="small"
                   type="link"
@@ -1104,7 +1075,7 @@ export function ObjectTypeAuthorizationScene() {
                   {t("systemAdmin.objectGrants.selectAllOperations")}
                 </AppButton>
                 <AppButton
-                  disabled={!candidateOperations.length}
+                  disabled={catalogLoading || !candidateOperations.length}
                   onClick={() => setCandidateOperations([])}
                   size="small"
                   type="link"
@@ -1127,6 +1098,7 @@ export function ObjectTypeAuthorizationScene() {
                       className={selected
                         ? styles.baseGrantOperationSelected
                         : styles.baseGrantOperation}
+                      disabled={catalogLoading}
                       onClick={() => toggleCandidateOperation(operation.key)}
                       type="button"
                     >
@@ -1159,6 +1131,7 @@ export function ObjectTypeAuthorizationScene() {
                 !candidateOperations.length ||
                 !candidateHasChanges ||
                 candidateWriteLocked ||
+                catalogLoading ||
                 !canGrant
               }
               icon={<PlusOutlined />}
@@ -1170,19 +1143,6 @@ export function ObjectTypeAuthorizationScene() {
             </AppButton>
           </footer>
         </div>
-        {candidateMissingManagedRequirements.length ? (
-          <div className={styles.baseGrantNotice} role="status">
-            <WarningOutlined />
-            {candidateMissingManagedRequirements.map(({ operation, requirement }) => (
-              <span key={`${operation.key}:${requirement.key}`}>
-                {t("systemAdmin.objectGrants.historicalRequiredSelectionNotice", {
-                  operation: operation.label,
-                  requirement: requirement.label,
-                })}
-              </span>
-            ))}
-          </div>
-        ) : null}
         {candidateRequirements.length ? (
           <div className={styles.baseGrantNotice}>
             <InfoCircleOutlined />
@@ -1232,7 +1192,7 @@ export function ObjectTypeAuthorizationScene() {
         open={Boolean(sourceGrant)}
         rootClassName={styles.baseSourceDrawer}
         title={sourceGrant
-          ? `${sourceGrantee || t("systemAdmin.objectGrants.granteeUnresolved")} / ${t("systemAdmin.objectGrants.grantSource")}`
+          ? `${sourceGrantee?.name || sourceGrant.accessorId} / ${t("systemAdmin.objectGrants.grantSource")}`
           : t("systemAdmin.objectGrants.grantSource")}
         width="min(760px, 100vw)"
       >
