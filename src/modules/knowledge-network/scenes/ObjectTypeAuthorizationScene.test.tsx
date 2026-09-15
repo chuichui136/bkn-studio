@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   appServices: {
     message: { error: vi.fn(), success: vi.fn() },
     modal: { confirm: vi.fn() },
-    runtimeConfig: { currentUser: { permissions: [] } },
+    runtimeConfig: { currentUser: { permissions: [] as string[] } },
   },
   getUser: vi.fn(),
   getDetail: vi.fn(),
