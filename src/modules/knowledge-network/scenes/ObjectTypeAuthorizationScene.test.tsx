@@ -652,7 +652,7 @@ describe("ObjectTypeAuthorizationScene", () => {
       }],
     });
 
-    render(<ObjectTypeAuthorizationScene />);
+    const { unmount } = render(<ObjectTypeAuthorizationScene />);
 
     const row = (await screen.findByText("Alice")).closest("tr");
     expect(row).not.toBeNull();
@@ -704,6 +704,7 @@ describe("ObjectTypeAuthorizationScene", () => {
       ["grant-modify"],
       ["grant-view-duplicate"],
     ]);
+    unmount();
   });
 
   it("renders clamped effective access when server decisions are unavailable", async () => {
