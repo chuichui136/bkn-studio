@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   listObjectGrantsForObject: vi.fn(),
   listUsersPage: vi.fn(),
   revokeObjectGrantForObject: vi.fn(),
+  revokeObjectGrantsForObject: vi.fn(),
   upsertObjectGrantForObject: vi.fn(),
   useCapability: vi.fn(),
 }));
@@ -51,6 +52,7 @@ vi.mock("@/modules/system-admin/services/authz.service", () => ({
   listEnterpriseObjectGrants: vi.fn(() => Promise.resolve([])),
   listObjectGrantsForObject: mocks.listObjectGrantsForObject,
   revokeObjectGrantForObject: mocks.revokeObjectGrantForObject,
+  revokeObjectGrantsForObject: mocks.revokeObjectGrantsForObject,
   upsertObjectGrantForObject: mocks.upsertObjectGrantForObject,
 }));
 vi.mock("@/modules/system-admin/utils/audit-lookup-cache", () => ({
@@ -226,7 +228,7 @@ describe("ObjectAuthorizeDrawer source records", () => {
     };
     await config.onOk();
 
-    expect(mocks.revokeObjectGrantForObject).toHaveBeenCalledWith("grant-admin-view");
+    expect(mocks.revokeObjectGrantsForObject).toHaveBeenCalledWith(["grant-admin-view"]);
   });
 
   it("keeps prerequisites selected in the explicit operation picker", async () => {
@@ -384,31 +386,44 @@ describe("ObjectAuthorizeDrawer source records", () => {
     expect((deleteActions[1].closest("button") as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("protects public and authorize-holder rows from delegate deletion", async () => {
+  it("keeps a grant-only owner scoped to its own sources beside authorize", async () => {
     const publicAccessorId = "00000000-0000-0000-0000-000000000000";
     appServices.runtimeConfig.currentUser.id = "u-owner";
-    appServices.runtimeConfig.currentUser.permissions = [];
+    appServices.runtimeConfig.currentUser.permissions = ["admin-authz:grant"];
     mocks.listObjectGrantsForObject.mockResolvedValue({
       accounts: [],
       grants: [
         grant(
-          [source({ accessorId: "u-owner", grantId: "owner-authorize", operation: "authorize" })],
+          [
+            source({ accessorId: "u-owner", grantId: "owner-authorize", operation: "authorize" }),
+            source({
+              accessorId: "u-owner",
+              authoritySource: "owner_delegate",
+              createdBy: "u-owner",
+              grantId: "owner-view",
+            }),
+          ],
           { accessorId: "u-owner" },
         ),
         grant(
           [source({ accessorId: publicAccessorId, grantId: "public-view" })],
           { accessorId: publicAccessorId },
         ),
-        grant([source({})]),
+        grant([source({ authoritySource: "owner_delegate", createdBy: "u-owner" })]),
+        grant(
+          [source({ accessorId: "u-other", authoritySource: "owner_delegate", createdBy: "u-another" })],
+          { accessorId: "u-other" },
+        ),
       ],
     });
 
     render(<ObjectAuthorizeDrawer objectAuthorized objId="catalog-1" objName="Customer catalog" objType="catalog" onClose={vi.fn()} open />);
     await act(async () => {});
 
-    expect(rowDeleteButton("u-owner").disabled).toBe(true);
+    expect(rowDeleteButton("u-owner").disabled).toBe(false);
     expect(rowDeleteButton(publicAccessorId).disabled).toBe(true);
     expect(rowDeleteButton("u-mate").disabled).toBe(false);
+    expect(rowDeleteButton("u-other").disabled).toBe(true);
   });
 
   it("prevents a revoke-only administrator from deleting their own authorize row", async () => {

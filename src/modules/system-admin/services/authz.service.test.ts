@@ -76,6 +76,7 @@ describe("object-grant backend contract", () => {
           active: true,
           accessor_id: "user-1",
           authority_source: "admin_authz",
+          created_by: "admin-1",
           effect: "allow",
           grant_id: "grant-allow-modify",
           inherited: false,
@@ -101,6 +102,7 @@ describe("object-grant backend contract", () => {
       "grant-allow-modify",
       "grant-deny-view",
     ]);
+    expect(result.grants?.[0]?.createdBy).toBe("admin-1");
     expect(result.effectiveDecisions).toEqual([
       expect.objectContaining({
         basis: "requires",

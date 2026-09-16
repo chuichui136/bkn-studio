@@ -78,13 +78,14 @@ import {
 import { authzPoints } from "@/modules/system-admin/permissions";
 import {
   listObjectGrantsForObject,
-  revokeObjectGrantForObject,
+  revokeObjectGrantsForObject,
   upsertObjectGrantForObject,
 } from "@/modules/system-admin/services/authz.service";
 import type { AdminRole, AdminUser } from "@/modules/system-admin/types/admin";
 import type { GrantRecord, ObjectGrant } from "@/modules/system-admin/types/authz";
 import { HIDDEN_INSTANCE_OPS } from "@/modules/system-admin/utils/authz-catalog";
 import {
+  canManageGrantSource,
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
 } from "@/modules/system-admin/utils/object-grant-guards";
@@ -126,6 +127,7 @@ function collapseGrantSources(records: GrantRecord[]): GrantSourceRow[] {
       record.accessorId,
       record.active,
       record.authoritySource,
+      record.createdBy,
       record.effect,
       record.inherited,
       record.operation,
@@ -578,7 +580,7 @@ export function ObjectTypeAuthorizationScene() {
   });
   const canGrant = networkAuthorized || isAdminGrantor;
   const canRevoke = networkAuthorized || isAdminRevoker;
-  const isPlatformAuthzAdmin = isAdminGrantor || isAdminRevoker;
+  const isPlatformAuthzRevoker = isAdminRevoker;
   const baseOps = useMemo(
     () => operationsForType("object_type").filter(
       (operation) =>
@@ -619,8 +621,9 @@ export function ObjectTypeAuthorizationScene() {
   };
 
   const isProtectedBaseGrant = (grant: ObjectGrant) =>
-    (!isPlatformAuthzAdmin && isDelegateProtectedGrant(grant)) ||
-    isSelfAuthorizeLockout({
+    !isPlatformAuthzRevoker && isDelegateProtectedGrant(grant);
+  const isSelfAuthorizeSourceLocked = (grant: ObjectGrant, operation: string) =>
+    operation === "authorize" && isSelfAuthorizeLockout({
       currentUserId: runtimeConfig.currentUser.id,
       grant,
       isAdminGrantor,
@@ -638,6 +641,7 @@ export function ObjectTypeAuthorizationScene() {
       source.effect === "allow" &&
       source.policySource === "professional_rule" &&
       source.authoritySource === candidateAuthoritySource &&
+      source.createdBy === runtimeConfig.currentUser.id &&
       Boolean(source.grantId),
   );
   const candidateManagedOperations = new Set(
@@ -656,7 +660,9 @@ export function ObjectTypeAuthorizationScene() {
   );
   const candidateHasDuplicateManagedOperations =
     candidateManagedSources.length !== candidateManagedOperations.size;
-  const candidateWriteLocked = candidateGrant ? isProtectedBaseGrant(candidateGrant) : false;
+  const candidateWriteLocked = candidateGrant
+    ? !isAdminGrantor && isDelegateProtectedGrant(candidateGrant)
+    : false;
   const candidateHasChanges =
     candidateHasDuplicateManagedOperations ||
     candidateOperations.length !== candidateManagedOperations.size ||
@@ -672,7 +678,8 @@ export function ObjectTypeAuthorizationScene() {
           !source.inherited &&
           source.effect === "allow" &&
           source.policySource === "professional_rule" &&
-          source.authoritySource === candidateAuthoritySource,
+          source.authoritySource === candidateAuthoritySource &&
+          source.createdBy === runtimeConfig.currentUser.id,
       )
       .map((source) => source.operation))];
     setCandidateOperations(normalizeCandidateOperations(directOperations));
@@ -733,6 +740,12 @@ export function ObjectTypeAuthorizationScene() {
         source.active &&
         !source.inherited &&
         source.policySource !== "role_permission" &&
+        canManageGrantSource({
+          currentUserId: runtimeConfig.currentUser.id,
+          isPlatformAuthzAdmin: isPlatformAuthzRevoker,
+          source,
+        }) &&
+        !isSelfAuthorizeSourceLocked(grant, source.operation) &&
         Boolean(source.grantId),
     );
 
@@ -756,9 +769,7 @@ export function ObjectTypeAuthorizationScene() {
       onOk: async () => {
         setBaseBusy(true);
         try {
-          for (const source of sources) {
-            await revokeObjectGrantForObject(source.grantId);
-          }
+          await revokeObjectGrantsForObject(sources.map((source) => source.grantId));
           setSourceAccessorId(undefined);
           await loadBase();
           void message.success(t("systemAdmin.objectGrants.toast.revoked"));
@@ -801,6 +812,12 @@ export function ObjectTypeAuthorizationScene() {
       !source.active ||
       source.inherited ||
       source.policySource === "role_permission" ||
+      !canManageGrantSource({
+        currentUserId: runtimeConfig.currentUser.id,
+        isPlatformAuthzAdmin: isPlatformAuthzRevoker,
+        source,
+      }) ||
+      isSelfAuthorizeSourceLocked(sourceGrant, source.operation) ||
       !source.grantIds.length ||
       blockingDependents.length
     ) {
@@ -821,9 +838,7 @@ export function ObjectTypeAuthorizationScene() {
       onOk: async () => {
         setBaseBusy(true);
         try {
-          for (const grantId of source.grantIds) {
-            await revokeObjectGrantForObject(grantId);
-          }
+          await revokeObjectGrantsForObject(source.grantIds);
           await loadBase();
           void message.success(t("systemAdmin.objectGrants.toast.revoked"));
         } catch (error) {
@@ -905,6 +920,12 @@ export function ObjectTypeAuthorizationScene() {
           !source.active ||
           source.inherited ||
           source.policySource === "role_permission" ||
+          !canManageGrantSource({
+            currentUserId: runtimeConfig.currentUser.id,
+            isPlatformAuthzAdmin: isPlatformAuthzRevoker,
+            source,
+          }) ||
+          (sourceGrant ? isSelfAuthorizeSourceLocked(sourceGrant, source.operation) : true) ||
           !source.grantIds.length ||
           blockingDependents.length > 0;
         return (

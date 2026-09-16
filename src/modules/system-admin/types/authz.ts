@@ -37,6 +37,8 @@ export type GrantRecord = {
   active: boolean;
   accessorId: string;
   authoritySource: GrantAuthoritySource;
+  /** Authenticated user that created this independently managed source. */
+  createdBy?: string;
   effect: GrantEffect;
   grantId: string;
   inherited: boolean;

@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   appServices: {
     message: { error: vi.fn(), success: vi.fn() },
     modal: { confirm: vi.fn() },
-    runtimeConfig: { currentUser: { permissions: [] as string[] } },
+    runtimeConfig: { currentUser: { id: "u-owner", permissions: [] as string[] } },
   },
   getUser: vi.fn(),
   getDetail: vi.fn(),
@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   networkAuthorized: true,
   propertyCapability: "available",
   revokeObjectGrantForObject: vi.fn(),
+  revokeObjectGrantsForObject: vi.fn(),
   snapshot: {
     capabilities: ["perm_fine_grained", "perm_object_level"],
     edition: "enterprise",
@@ -91,6 +92,7 @@ vi.mock("@/modules/system-admin/services/authz.service", () => ({
   listEnterpriseObjectGrants: mocks.listEnterpriseObjectGrants,
   listObjectGrantsForObject: mocks.listObjectGrantsForObject,
   revokeObjectGrantForObject: mocks.revokeObjectGrantForObject,
+  revokeObjectGrantsForObject: mocks.revokeObjectGrantsForObject,
   upsertObjectGrantForObject: mocks.upsertObjectGrantForObject,
 }));
 
@@ -275,6 +277,7 @@ describe("ObjectTypeAuthorizationScene", () => {
             accessorId: "user-1",
             active: true,
             authoritySource: "owner_delegate",
+            createdBy: "u-owner",
             effect: "allow",
             grantId: "grant-view",
             inherited: false,
@@ -285,6 +288,7 @@ describe("ObjectTypeAuthorizationScene", () => {
             accessorId: "user-1",
             active: true,
             authoritySource: "owner_delegate",
+            createdBy: "u-owner",
             effect: "allow",
             grantId: "grant-modify",
             inherited: false,
@@ -393,12 +397,22 @@ describe("ObjectTypeAuthorizationScene", () => {
             operation: "modify",
             policySource: "professional_rule",
           },
+          {
+            accessorId: "user-1",
+            active: true,
+            authoritySource: "admin_authz",
+            effect: "allow",
+            grantId: "grant-admin-authorize",
+            inherited: false,
+            operation: "authorize",
+            policySource: "professional_rule",
+          },
         ],
         objId: "network-1/object-1",
         objName: "Customer",
         objSub: "network-1",
         objType: "object_type",
-        operations: ["view_detail", "modify"],
+        operations: ["view_detail", "modify", "authorize"],
       }],
     });
 
@@ -467,6 +481,7 @@ describe("ObjectTypeAuthorizationScene", () => {
           accessorId: "user-1",
           active: true,
           authoritySource: "owner_delegate",
+          createdBy: "u-owner",
           effect: "allow",
           grantId: "grant-query",
           inherited: false,
@@ -700,10 +715,10 @@ describe("ObjectTypeAuthorizationScene", () => {
     };
     await act(async () => confirm.onOk());
 
-    expect(mocks.revokeObjectGrantForObject.mock.calls).toEqual([
-      ["grant-view"],
-      ["grant-modify"],
-      ["grant-view-duplicate"],
+    expect(mocks.revokeObjectGrantsForObject).toHaveBeenCalledWith([
+      "grant-view",
+      "grant-modify",
+      "grant-view-duplicate",
     ]);
     unmount();
   });

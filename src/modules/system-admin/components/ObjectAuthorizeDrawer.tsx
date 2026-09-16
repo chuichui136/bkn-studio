@@ -38,6 +38,7 @@ import {
   listObjectGrantsForObject,
   listEnterpriseObjectGrants,
   revokeObjectGrantForObject,
+  revokeObjectGrantsForObject,
   upsertObjectGrantForObject,
 } from "@/modules/system-admin/services/authz.service";
 import type { AdminDepartment } from "@/modules/system-admin/types/admin";
@@ -53,6 +54,7 @@ import {
   isCommunityObjectGrantType,
 } from "@/modules/system-admin/utils/authz-catalog";
 import {
+  canManageGrantSource,
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
 } from "@/modules/system-admin/utils/object-grant-guards";
@@ -131,12 +133,10 @@ export function ObjectAuthorizeDrawer({
     currentPermissions,
     requiredPermissions: authzPoints.revoke,
   });
-  // Either admin-authz point makes the caller a platform administrator, the party bkn-safe exempts
-  // from its per-row guard. The two points are held separately — a review role may carry `revoke`
-  // alone — so reading administrator status off `grant` would lock a revoke-only administrator out
-  // of rows the backend accepts from them. Which control they get is still decided per direction by
-  // canGrant/canRevoke below.
-  const isPlatformAuthzAdmin = isAdminGrantor || isAdminRevoker;
+  // Source ownership is checked in the revoke direction. A caller holding only
+  // admin-authz:grant is still an ordinary object delegate when deleting and
+  // must not be offered controls the backend will reject.
+  const isPlatformAuthzRevoker = isAdminRevoker;
   const currentUserId = runtimeConfig.currentUser.id;
   const canGrant = objectAuthorized || isAdminGrantor;
   const canRevoke = objectAuthorized || isAdminRevoker;
@@ -298,24 +298,22 @@ export function ObjectAuthorizeDrawer({
 
   const grantProtection = useCallback(
     (grant: ObjectGrant) => {
-      const delegateLocked = !isPlatformAuthzAdmin && isDelegateProtectedGrant(grant);
+      const delegateLocked = !isPlatformAuthzRevoker && isDelegateProtectedGrant(grant);
       const selfAuthorizeLocked = isSelfAuthorizeLockout({
         currentUserId,
         grant,
         isAdminGrantor,
       });
       return {
-        eraseLocked: delegateLocked || selfAuthorizeLocked,
+        eraseLocked: delegateLocked,
         sourceWriteLocked: delegateLocked,
         reason: delegateLocked
             ? t("systemAdmin.objectGrants.delegateLocked")
-            : selfAuthorizeLocked
-              ? t("systemAdmin.objectGrants.selfAuthorizeLocked")
-              : undefined,
+            : undefined,
         selfAuthorizeLocked,
       };
     },
-    [currentUserId, isAdminGrantor, isPlatformAuthzAdmin, t],
+    [currentUserId, isAdminGrantor, isPlatformAuthzRevoker, t],
   );
 
   const visibleGrants = useMemo(
@@ -386,6 +384,7 @@ export function ObjectAuthorizeDrawer({
       }
       const protection = grantProtection(grant);
       return source.active && !source.inherited && source.policySource !== "role_permission" &&
+        canManageGrantSource({ currentUserId, isPlatformAuthzAdmin: isPlatformAuthzRevoker, source }) &&
         Boolean(source.grantId) && !protection.sourceWriteLocked &&
         !(protection.selfAuthorizeLocked && source.operation === "authorize");
     });
@@ -426,9 +425,7 @@ export function ObjectAuthorizeDrawer({
       onOk: async () => {
         setBusy(true);
         try {
-          for (const source of sources) {
-            await revokeObjectGrantForObject(source.grantId);
-          }
+          await revokeObjectGrantsForObject(sources.map((source) => source.grantId));
           setSourceAccessorId(undefined);
           message.success(t("systemAdmin.objectGrants.toast.revoked"));
           await loadRemote();
@@ -444,7 +441,11 @@ export function ObjectAuthorizeDrawer({
   };
 
   const handleRevokeSource = (grant: ObjectGrant | undefined, source: GrantRecord) => {
-    if (!grant || dependentOperationsForGrant(grant, source.operation).length) {
+    if (
+      !grant ||
+      !canManageGrantSource({ currentUserId, isPlatformAuthzAdmin: isPlatformAuthzRevoker, source }) ||
+      dependentOperationsForGrant(grant, source.operation).length
+    ) {
       return;
     }
     const grantee = resolveGrantee(grant);

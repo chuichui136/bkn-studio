@@ -5,27 +5,47 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import type { ObjectGrant } from "@/modules/system-admin/types/authz";
+import type { GrantRecord, ObjectGrant } from "@/modules/system-admin/types/authz";
 
 /** The subject bkn-safe writes when the execution factory publishes something to everyone. */
 export const PUBLIC_ACCESSOR_ID = "00000000-0000-0000-0000-000000000000";
 
 /**
- * Whether bkn-safe will refuse a non-administrator write against this row (its
- * protectAuthorizeHolder guard), so a surface can lock it rather than offer a control that
- * always 403s.
+ * Whether bkn-safe will refuse a non-administrator write against this target
+ * regardless of source ownership.
  *
- * Two rows are off limits to a delegate, and both because the write erases: POST is
- * replace-semantics and DELETE removes everything the accessor holds.
- *
- * - A row carrying `authorize` — the object's creator, or anyone an administrator trusted with
- *   sharing. Letting a delegate rewrite it would let them take the object away from the person who
- *   made it, and `authorize` is administrator-conferred, so nobody outside the admin points could
- *   put it back. This covers the caller's OWN row.
- * - The public-access row, whose removal would un-publish the object platform-wide.
+ * Source-scoped writes no longer erase every permission held by the grantee, so
+ * an unrelated `authorize` source must not lock the caller's own ordinary
+ * source. The public accessor remains target-wide protected because changing it
+ * publishes or unpublishes the object for everyone.
  */
 export function isDelegateProtectedGrant(grant: ObjectGrant) {
-  return grant.accessorId === PUBLIC_ACCESSOR_ID || grant.operations.includes("authorize");
+  return grant.accessorId === PUBLIC_ACCESSOR_ID;
+}
+
+/**
+ * A delegated writer can manage only source records it created. Older records
+ * without a concrete creator are deliberately read-only for delegates: their
+ * ownership cannot be reconstructed safely. Platform authorization admins may
+ * manage every source through the administrator route.
+ */
+export function canManageGrantSource({
+  currentUserId,
+  isPlatformAuthzAdmin,
+  source,
+}: {
+  currentUserId: string | null | undefined;
+  isPlatformAuthzAdmin: boolean;
+  source: GrantRecord;
+}) {
+  return isPlatformAuthzAdmin || (
+    Boolean(currentUserId) &&
+    source.createdBy === currentUserId &&
+    source.policySource === "professional_rule" &&
+    source.authoritySource === "owner_delegate" &&
+    source.effect === "allow" &&
+    source.operation !== "authorize"
+  );
 }
 
 /**
