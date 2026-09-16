@@ -5,11 +5,14 @@
  * Conditions. See LICENSE for the full text.
  */
 
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import i18n from "@/app/locales/i18n";
 import {
   normalizeAuthorizationRegistry,
 } from "@/modules/system-admin/services/authorization-registry.service";
+import { useAuthorizationRegistry } from "@/modules/system-admin/hooks/use-authorization-registry";
 
 describe("authorization catalog contract", () => {
   it("preserves explicit parent fallback and same-resource requirements", () => {
@@ -46,5 +49,34 @@ describe("authorization catalog contract", () => {
     });
 
     expect(catalog.resourceTypes[0]?.operations[0]?.requires).toEqual([]);
+  });
+
+  it("updates registry labels after the interface language changes", async () => {
+    await act(() => i18n.changeLanguage("en-US"));
+    const { result } = renderHook(() => useAuthorizationRegistry());
+
+    await waitFor(() => expect(result.current.catalog).toBeDefined());
+    const catalog = result.current.catalog!;
+    const resourceType = catalog.resourceTypes.find((item) =>
+      item.operations.some((operation) =>
+        i18n.exists(`systemAdmin.resourceCatalog.operations.${operation.id}`),
+      ),
+    );
+    const operation = resourceType?.operations.find((item) =>
+      i18n.exists(`systemAdmin.resourceCatalog.operations.${item.id}`),
+    );
+    expect(resourceType).toBeDefined();
+    expect(operation).toBeDefined();
+    if (!resourceType || !operation) throw new Error("expected a translated registry operation");
+
+    const before = result.current.operationsForType(resourceType.id)
+      .find((item) => item.key === operation.id)?.label;
+
+    await act(() => i18n.changeLanguage("zh-CN"));
+
+    await waitFor(() => expect(result.current.operationsForType(resourceType.id)
+      .find((item) => item.key === operation.id)?.label)
+      .toBe(i18n.t(`systemAdmin.resourceCatalog.operations.${operation.id}`)));
+    expect(before).not.toBe(i18n.t(`systemAdmin.resourceCatalog.operations.${operation.id}`));
   });
 });

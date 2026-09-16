@@ -6,8 +6,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import i18n from "@/app/locales/i18n";
 import {
   getAuthorizationRegistry,
   mockAuthorizationRegistry,
@@ -23,6 +23,7 @@ export type CatalogOperationOption = {
 };
 
 export function useAuthorizationRegistry() {
+  const { i18n, t } = useTranslation();
   const [catalog, setCatalog] = useState<AuthorizationRegistry | undefined>(() =>
     usesMockAuthorizationRegistry ? mockAuthorizationRegistry() : undefined,
   );
@@ -62,11 +63,11 @@ export function useAuthorizationRegistry() {
     return (resourceType?.operations ?? []).map((operation) => ({
       key: operation.id,
       label: i18n.exists(`systemAdmin.resourceCatalog.operations.${operation.id}`)
-        ? i18n.t(`systemAdmin.resourceCatalog.operations.${operation.id}`)
+        ? t(`systemAdmin.resourceCatalog.operations.${operation.id}`)
         : operation.name,
       requires: operation.requires,
     }));
-  }, [catalog]);
+  }, [catalog, i18n, t]);
 
   const resourceTypeOptions = useCallback((types?: readonly string[]) => {
     const allowed = types ? new Set(types) : undefined;
@@ -74,11 +75,11 @@ export function useAuthorizationRegistry() {
       .filter((resourceType) => !allowed || allowed.has(resourceType.id))
       .map((resourceType) => ({
         label: i18n.exists(`systemAdmin.resourceCatalog.resources.${resourceType.id}`)
-          ? i18n.t(`systemAdmin.resourceCatalog.resources.${resourceType.id}`)
+          ? t(`systemAdmin.resourceCatalog.resources.${resourceType.id}`)
           : resourceType.name,
         value: resourceType.id,
       }));
-  }, [catalog]);
+  }, [catalog, i18n, t]);
 
   return {
     catalog,
