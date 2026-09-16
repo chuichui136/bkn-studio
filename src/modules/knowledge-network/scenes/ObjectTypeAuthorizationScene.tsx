@@ -1059,7 +1059,7 @@ export function ObjectTypeAuthorizationScene() {
   const baseGrantColumns: ColumnsType<ObjectGrant> = [
     {
       dataIndex: "accessorId",
-      render: (id: string, grant: ObjectGrant) => {
+      render: (_id: string, grant: ObjectGrant) => {
         const { account, name: displayName, publicSubject, roleSubject } = resolveGrantSubject(grant);
         return (
           <div className={styles.subjectName}>
