@@ -41,9 +41,15 @@ describe("audit user lookup", () => {
   it("distinguishes deleted users from temporary lookup failures", async () => {
     getUser.mockImplementation((id: string) => {
       if (id === "u-deleted") {
-        return Promise.reject({ isAxiosError: true, response: { status: 404 } });
+        return Promise.reject(Object.assign(new Error("user not found"), {
+          isAxiosError: true,
+          response: { status: 404 },
+        }));
       }
-      return Promise.reject({ isAxiosError: true, response: { status: 503 } });
+      return Promise.reject(Object.assign(new Error("directory unavailable"), {
+        isAxiosError: true,
+        response: { status: 503 },
+      }));
     });
 
     await expect(hydrateUserLookupDetails(["u-deleted", "u-unavailable"]))
