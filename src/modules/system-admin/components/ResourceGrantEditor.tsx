@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AppButton } from "@/framework/ui/common/AppButton";
-import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
+import { AuthorizationRegistryFailureAlert } from "@/modules/system-admin/components/AuthorizationRegistryFailureAlert";
 import type { ResourceGrant, ResourceRef } from "@/modules/system-admin/types/admin";
 import {
   operationLabel,
@@ -19,7 +19,7 @@ import {
   resourceTypeLabel,
   WILDCARD,
 } from "@/modules/system-admin/utils/resource-catalog";
-import { useAuthorizationCatalog } from "@/modules/system-admin/hooks/use-authorization-catalog";
+import { useAuthorizationRegistry } from "@/modules/system-admin/hooks/use-authorization-registry";
 
 import styles from "@/modules/system-admin/scenes/admin.module.css";
 
@@ -60,8 +60,8 @@ export function ResourceGrantEditor({
     catalogError,
     catalogLoading,
     operationsForType,
-    retryAuthorizationCatalog,
-  } = useAuthorizationCatalog();
+    retryAuthorizationRegistry,
+  } = useAuthorizationRegistry();
   const [draftType, setDraftType] = useState<string>(
     lockedResource?.type ?? ROLE_GRANT_RESOURCE_TYPES[0].type,
   );
@@ -206,7 +206,7 @@ export function ResourceGrantEditor({
 
       {!disabled ? (
         <>
-          <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
+          <AuthorizationRegistryFailureAlert error={catalogError} onRetry={retryAuthorizationRegistry} />
           <div className={styles.grantAddRow}>
             {!lockedResource ? (
               <>

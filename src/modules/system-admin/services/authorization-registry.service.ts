@@ -11,43 +11,43 @@ import {
   RESOURCE_TYPES,
 } from "@/modules/system-admin/utils/resource-catalog";
 
-export type AuthorizationCatalogOperation = {
+export type AuthorizationRegistryOperation = {
   id: string;
   name: string;
   parentOperation?: string;
   requires: string[];
 };
 
-export type AuthorizationCatalogResourceType = {
+export type AuthorizationRegistryResourceType = {
   id: string;
   name: string;
   parentType?: string;
-  operations: AuthorizationCatalogOperation[];
+  operations: AuthorizationRegistryOperation[];
 };
 
-export type AuthorizationCatalog = {
-  resourceTypes: AuthorizationCatalogResourceType[];
+export type AuthorizationRegistry = {
+  resourceTypes: AuthorizationRegistryResourceType[];
 };
 
 const useMock = import.meta.env.VITE_USE_MOCK !== "false";
-const AUTHZ_CATALOG = "/safe/v1/me/authorization-catalog";
+const AUTHZ_CATALOG = "/safe/v1/me/authorization-registry";
 
-export const usesMockAuthorizationCatalog = useMock;
+export const usesMockAuthorizationRegistry = useMock;
 
-let catalogPromise: Promise<AuthorizationCatalog> | undefined;
+let catalogPromise: Promise<AuthorizationRegistry> | undefined;
 
 /**
  * Reads the catalog persisted by bkn-safe, rather than a Studio-maintained
  * operation list. The mock conversion is intentionally confined to demo mode.
  * The browser route is token-gated; the tokenless /authz route is ClusterIP-only.
  */
-export function getAuthorizationCatalog(): Promise<AuthorizationCatalog> {
+export function getAuthorizationRegistry(): Promise<AuthorizationRegistry> {
   if (useMock) {
-    return Promise.resolve(mockAuthorizationCatalog());
+    return Promise.resolve(mockAuthorizationRegistry());
   }
   if (!catalogPromise) {
-    const request = http.get<BackendAuthorizationCatalog>(AUTHZ_CATALOG)
-      .then((response) => normalizeAuthorizationCatalog(response.data));
+    const request = http.get<BackendAuthorizationRegistry>(AUTHZ_CATALOG)
+      .then((response) => normalizeAuthorizationRegistry(response.data));
     catalogPromise = request;
     // Do not retain a rejected promise for the lifetime of the SPA. A transient
     // gateway or token-refresh failure must be retryable from the authoring UI.
@@ -60,11 +60,11 @@ export function getAuthorizationCatalog(): Promise<AuthorizationCatalog> {
   return catalogPromise;
 }
 
-export function resetAuthorizationCatalogCache() {
+export function resetAuthorizationRegistryCache() {
   catalogPromise = undefined;
 }
 
-export type BackendAuthorizationCatalog = {
+export type BackendAuthorizationRegistry = {
   resource_types?: Array<{
     id?: string;
     name?: string;
@@ -78,7 +78,7 @@ export type BackendAuthorizationCatalog = {
   }>;
 };
 
-export function normalizeAuthorizationCatalog(input: BackendAuthorizationCatalog): AuthorizationCatalog {
+export function normalizeAuthorizationRegistry(input: BackendAuthorizationRegistry): AuthorizationRegistry {
   return {
     resourceTypes: (input.resource_types ?? [])
       .filter((resourceType) => Boolean(resourceType.id))
@@ -98,7 +98,7 @@ export function normalizeAuthorizationCatalog(input: BackendAuthorizationCatalog
   };
 }
 
-export function mockAuthorizationCatalog(): AuthorizationCatalog {
+export function mockAuthorizationRegistry(): AuthorizationRegistry {
   return {
     resourceTypes: RESOURCE_TYPES.map((resourceType) => ({
       id: resourceType.type,

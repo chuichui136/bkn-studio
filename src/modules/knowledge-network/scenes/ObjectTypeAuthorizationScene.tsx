@@ -44,7 +44,7 @@ import { hasPermissions } from "@/framework/permission/has-permissions";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { DirectoryUserPicker } from "@/modules/system-admin";
-import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
+import { AuthorizationRegistryFailureAlert } from "@/modules/system-admin/components/AuthorizationRegistryFailureAlert";
 import { ObjectTypeDataAttributeFormDrawer } from "@/modules/knowledge-network/components/object-type/data-attribute/ObjectTypeDataAttributeFormDrawer";
 import { KnowledgeNetworkResourceConfigShell } from "@/modules/knowledge-network/components/shared/KnowledgeNetworkResourceConfigShell";
 import { useKnowledgeNetworkCanOperate } from "@/modules/knowledge-network/hooks/useKnowledgeNetworkCanModify";
@@ -89,7 +89,7 @@ import {
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
 } from "@/modules/system-admin/utils/object-grant-guards";
-import { useAuthorizationCatalog } from "@/modules/system-admin/hooks/use-authorization-catalog";
+import { useAuthorizationRegistry } from "@/modules/system-admin/hooks/use-authorization-registry";
 
 import styles from "./ObjectTypeAuthorizationScene.module.css";
 
@@ -150,8 +150,8 @@ export function ObjectTypeAuthorizationScene() {
     catalogError,
     catalogLoading,
     operationsForType,
-    retryAuthorizationCatalog,
-  } = useAuthorizationCatalog();
+    retryAuthorizationRegistry,
+  } = useAuthorizationRegistry();
   const { networkId = "", objectTypeId = "" } = useParams<{
     networkId: string;
     objectTypeId: string;
@@ -1484,7 +1484,7 @@ export function ObjectTypeAuthorizationScene() {
       title={t("knowledgeNetwork.propertyAuthorizationTitle", { name: detail.name })}
     >
       <div className={styles.page}>
-        <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
+        <AuthorizationRegistryFailureAlert error={catalogError} onRetry={retryAuthorizationRegistry} />
         <Tabs
           activeKey={activeTab}
           items={[

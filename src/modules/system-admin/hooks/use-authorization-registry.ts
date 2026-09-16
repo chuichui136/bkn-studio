@@ -9,12 +9,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import i18n from "@/app/locales/i18n";
 import {
-  getAuthorizationCatalog,
-  mockAuthorizationCatalog,
-  resetAuthorizationCatalogCache,
-  type AuthorizationCatalog,
-  usesMockAuthorizationCatalog,
-} from "@/modules/system-admin/services/authorization-catalog.service";
+  getAuthorizationRegistry,
+  mockAuthorizationRegistry,
+  resetAuthorizationRegistryCache,
+  type AuthorizationRegistry,
+  usesMockAuthorizationRegistry,
+} from "@/modules/system-admin/services/authorization-registry.service";
 
 export type CatalogOperationOption = {
   key: string;
@@ -22,9 +22,9 @@ export type CatalogOperationOption = {
   requires: string[];
 };
 
-export function useAuthorizationCatalog() {
-  const [catalog, setCatalog] = useState<AuthorizationCatalog | undefined>(() =>
-    usesMockAuthorizationCatalog ? mockAuthorizationCatalog() : undefined,
+export function useAuthorizationRegistry() {
+  const [catalog, setCatalog] = useState<AuthorizationRegistry | undefined>(() =>
+    usesMockAuthorizationRegistry ? mockAuthorizationRegistry() : undefined,
   );
   const [error, setError] = useState<unknown>();
   const [requestRevision, setRequestRevision] = useState(0);
@@ -34,7 +34,7 @@ export function useAuthorizationCatalog() {
       return;
     }
     let active = true;
-    void getAuthorizationCatalog().then(
+    void getAuthorizationRegistry().then(
       (nextCatalog) => {
         if (active) {
           setCatalog(nextCatalog);
@@ -51,8 +51,8 @@ export function useAuthorizationCatalog() {
     };
   }, [catalog, requestRevision]);
 
-  const retryAuthorizationCatalog = useCallback(() => {
-    resetAuthorizationCatalogCache();
+  const retryAuthorizationRegistry = useCallback(() => {
+    resetAuthorizationRegistryCache();
     setError(undefined);
     setRequestRevision((revision) => revision + 1);
   }, []);
@@ -88,6 +88,6 @@ export function useAuthorizationCatalog() {
     catalogLoading: !catalog,
     operationsForType,
     resourceTypeOptions,
-    retryAuthorizationCatalog,
+    retryAuthorizationRegistry,
   };
 }

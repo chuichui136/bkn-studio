@@ -10,16 +10,16 @@ import { useTranslation } from "react-i18next";
 
 import { AppButton } from "@/framework/ui/common/AppButton";
 
-type AuthorizationCatalogFailureAlertProps = {
+type AuthorizationRegistryFailureAlertProps = {
   error: unknown;
   onRetry: () => void;
 };
 
 /** Keep authorization authoring unavailable rather than falling back to stale operation metadata. */
-export function AuthorizationCatalogFailureAlert({
+export function AuthorizationRegistryFailureAlert({
   error,
   onRetry,
-}: AuthorizationCatalogFailureAlertProps) {
+}: AuthorizationRegistryFailureAlertProps) {
   const { t } = useTranslation();
   if (!error) {
     return null;
@@ -27,7 +27,7 @@ export function AuthorizationCatalogFailureAlert({
   return (
     <Alert
       action={<AppButton onClick={onRetry} type="link">{t("common.retry")}</AppButton>}
-      message={t("systemAdmin.authorizationCatalog.loadFailed")}
+      message={t("systemAdmin.authorizationRegistry.loadFailed")}
       showIcon
       type="error"
     />

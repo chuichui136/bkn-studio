@@ -23,7 +23,7 @@ import { useCapability } from "@/framework/entitlement/use-entitlement";
 import { PermissionGate } from "@/framework/permission/PermissionGate";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
-import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
+import { AuthorizationRegistryFailureAlert } from "@/modules/system-admin/components/AuthorizationRegistryFailureAlert";
 import { DirectoryUserPicker } from "@/modules/system-admin/components/DirectoryUserPicker";
 import { authzPoints } from "@/modules/system-admin/permissions";
 import { listUsers } from "@/modules/system-admin/services/admin.service";
@@ -41,7 +41,7 @@ import {
   isCommunityObjectGrantType,
 } from "@/modules/system-admin/utils/authz-catalog";
 import { resourceTypeLabel } from "@/modules/system-admin/utils/resource-catalog";
-import { useAuthorizationCatalog } from "@/modules/system-admin/hooks/use-authorization-catalog";
+import { useAuthorizationRegistry } from "@/modules/system-admin/hooks/use-authorization-registry";
 
 import styles from "./admin.module.css";
 
@@ -91,8 +91,8 @@ export function ObjectAuthorizationCreateScene() {
     catalogError,
     catalogLoading,
     operationsForType,
-    retryAuthorizationCatalog,
-  } = useAuthorizationCatalog();
+    retryAuthorizationRegistry,
+  } = useAuthorizationRegistry();
   const fineGrainedCapability = useCapability(CAPABILITIES.PERM_FINE_GRAINED);
   const fineGrained = fineGrainedCapability === "available";
   // Deep link from the object's own page (`?object=catalog::<id>`), so an administrator sent here
@@ -454,7 +454,7 @@ export function ObjectAuthorizationCreateScene() {
         </div>
       </header>
 
-      <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
+      <AuthorizationRegistryFailureAlert error={catalogError} onRetry={retryAuthorizationRegistry} />
       {loadError ? (
         <Alert
           action={

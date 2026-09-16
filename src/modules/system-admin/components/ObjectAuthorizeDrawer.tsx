@@ -32,7 +32,7 @@ import { RequireEdition } from "@/framework/entitlement/RequireEdition";
 import { useCapability } from "@/framework/entitlement/use-entitlement";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
-import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
+import { AuthorizationRegistryFailureAlert } from "@/modules/system-admin/components/AuthorizationRegistryFailureAlert";
 import { hasPermissions } from "@/framework/permission/has-permissions";
 import { authzPoints } from "@/modules/system-admin/permissions";
 import {
@@ -60,7 +60,7 @@ import {
 import {
   resourceTypeLabel,
 } from "@/modules/system-admin/utils/resource-catalog";
-import { useAuthorizationCatalog } from "@/modules/system-admin/hooks/use-authorization-catalog";
+import { useAuthorizationRegistry } from "@/modules/system-admin/hooks/use-authorization-registry";
 
 import styles from "@/modules/system-admin/scenes/admin.module.css";
 
@@ -116,8 +116,8 @@ export function ObjectAuthorizeDrawer({
     catalogError,
     catalogLoading,
     operationsForType,
-    retryAuthorizationCatalog,
-  } = useAuthorizationCatalog();
+    retryAuthorizationRegistry,
+  } = useAuthorizationRegistry();
   const fineGrainedState = useCapability(CAPABILITIES.PERM_FINE_GRAINED);
   const fineGrained = fineGrainedState === "available";
   const enterpriseAvailable = useCapability(CAPABILITIES.PERM_OBJECT_LEVEL) === "available";
@@ -1083,7 +1083,7 @@ export function ObjectAuthorizeDrawer({
       title={drawerTitle}
       width="min(920px, calc(100vw - 24px))"
     >
-      <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
+      <AuthorizationRegistryFailureAlert error={catalogError} onRetry={retryAuthorizationRegistry} />
       {content}
     </Drawer>
   );

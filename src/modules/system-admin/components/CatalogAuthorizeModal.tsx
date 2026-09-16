@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import { useAppServices } from "@/framework/context/use-app-services";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
-import { AuthorizationCatalogFailureAlert } from "@/modules/system-admin/components/AuthorizationCatalogFailureAlert";
+import { AuthorizationRegistryFailureAlert } from "@/modules/system-admin/components/AuthorizationRegistryFailureAlert";
 import { listRoles, setRolePermission } from "@/modules/system-admin/services/admin.service";
 import type { AdminRole } from "@/modules/system-admin/types/admin";
 import { roleDescription } from "@/modules/system-admin/utils/role-catalog";
@@ -20,7 +20,7 @@ import {
   operationLabel,
   WILDCARD,
 } from "@/modules/system-admin/utils/resource-catalog";
-import { useAuthorizationCatalog } from "@/modules/system-admin/hooks/use-authorization-catalog";
+import { useAuthorizationRegistry } from "@/modules/system-admin/hooks/use-authorization-registry";
 
 import styles from "@/modules/system-admin/scenes/admin.module.css";
 
@@ -49,8 +49,8 @@ export function CatalogAuthorizeModal({
     catalogError,
     catalogLoading,
     operationsForType,
-    retryAuthorizationCatalog,
-  } = useAuthorizationCatalog();
+    retryAuthorizationRegistry,
+  } = useAuthorizationRegistry();
   const catalogOps = useMemo(() => operationsForType("catalog"), [operationsForType]);
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [loading, setLoading] = useState(false);
@@ -171,7 +171,7 @@ export function CatalogAuthorizeModal({
       <p className={styles.subText} style={{ marginTop: 0 }}>
         {t("systemAdmin.authorize.subtitle")}
       </p>
-      <AuthorizationCatalogFailureAlert error={catalogError} onRetry={retryAuthorizationCatalog} />
+      <AuthorizationRegistryFailureAlert error={catalogError} onRetry={retryAuthorizationRegistry} />
 
       <div className={styles.grantAddRow} style={{ marginBottom: 16 }}>
         <Select

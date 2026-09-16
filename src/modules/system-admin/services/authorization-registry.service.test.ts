@@ -8,12 +8,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  normalizeAuthorizationCatalog,
-} from "@/modules/system-admin/services/authorization-catalog.service";
+  normalizeAuthorizationRegistry,
+} from "@/modules/system-admin/services/authorization-registry.service";
 
 describe("authorization catalog contract", () => {
   it("preserves explicit parent fallback and same-resource requirements", () => {
-    const catalog = normalizeAuthorizationCatalog({
+    const catalog = normalizeAuthorizationRegistry({
       resource_types: [{
         id: "object_type",
         name: "Object Type",
@@ -37,7 +37,7 @@ describe("authorization catalog contract", () => {
   });
 
   it("does not invent requirements for independent operations", () => {
-    const catalog = normalizeAuthorizationCatalog({
+    const catalog = normalizeAuthorizationRegistry({
       resource_types: [{
         id: "resource",
         name: "Data Resource",

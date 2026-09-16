@@ -26,7 +26,7 @@ const appServices = vi.hoisted(() => ({
     currentUser: { id: "u-admin", permissions: ["admin-authz:grant", "admin-authz:revoke"] },
   },
 }));
-const authorizationCatalog = vi.hoisted(() => ({
+const authorizationRegistry = vi.hoisted(() => ({
   operationsForType: (type: string) => ({
     action_type: [
       { key: "view_detail", label: "view_detail", requires: [] },
@@ -83,12 +83,12 @@ vi.mock("@/modules/system-admin/utils/audit-lookup-cache", () => ({
   hydrateUserLookup: vi.fn(() => Promise.resolve([])),
   primeUserLookupCache: vi.fn(),
 }));
-vi.mock("@/modules/system-admin/hooks/use-authorization-catalog", () => ({
-  useAuthorizationCatalog: () => ({
+vi.mock("@/modules/system-admin/hooks/use-authorization-registry", () => ({
+  useAuthorizationRegistry: () => ({
     catalogError: undefined,
     catalogLoading: false,
-    operationsForType: authorizationCatalog.operationsForType,
-    retryAuthorizationCatalog: vi.fn(),
+    operationsForType: authorizationRegistry.operationsForType,
+    retryAuthorizationRegistry: vi.fn(),
   }),
 }));
 
