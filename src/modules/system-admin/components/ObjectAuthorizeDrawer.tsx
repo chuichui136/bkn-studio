@@ -32,6 +32,7 @@ import { RequireEdition } from "@/framework/entitlement/RequireEdition";
 import { useCapability } from "@/framework/entitlement/use-entitlement";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
+import { AuthorizationRegistryFailureAlert } from "@/modules/system-admin/components/AuthorizationRegistryFailureAlert";
 import { hasPermissions } from "@/framework/permission/has-permissions";
 import { authzPoints } from "@/modules/system-admin/permissions";
 import {
@@ -57,9 +58,9 @@ import {
   isSelfAuthorizeLockout,
 } from "@/modules/system-admin/utils/object-grant-guards";
 import {
-  operationsForType,
   resourceTypeLabel,
 } from "@/modules/system-admin/utils/resource-catalog";
+import { useAuthorizationRegistry } from "@/modules/system-admin/hooks/use-authorization-registry";
 
 import styles from "@/modules/system-admin/scenes/admin.module.css";
 
@@ -111,6 +112,12 @@ export function ObjectAuthorizeDrawer({
 }: ObjectAuthorizeDrawerProps) {
   const { t } = useTranslation();
   const { message, modal, runtimeConfig } = useAppServices();
+  const {
+    catalogError,
+    catalogLoading,
+    operationsForType,
+    retryAuthorizationRegistry,
+  } = useAuthorizationRegistry();
   const fineGrainedState = useCapability(CAPABILITIES.PERM_FINE_GRAINED);
   const fineGrained = fineGrainedState === "available";
   const enterpriseAvailable = useCapability(CAPABILITIES.PERM_OBJECT_LEVEL) === "available";
@@ -163,7 +170,7 @@ export function ObjectAuthorizeDrawer({
         (op) =>
           !HIDDEN_INSTANCE_OPS.has(op.key) && (op.key !== "authorize" || !objectAuthorized || isAdminGrantor),
       ),
-    [isAdminGrantor, objType, objectAuthorized],
+    [isAdminGrantor, objType, objectAuthorized, operationsForType],
   );
 
   const candidateRequirements = useMemo(
@@ -856,7 +863,7 @@ export function ObjectAuthorizeDrawer({
                 {fineGrained ? (
                   <div className={styles.authzGrantFieldActions}>
                     <AppButton
-                      disabled={!ops.length || candidateOperations.length === ops.length}
+                      disabled={catalogLoading || !ops.length || candidateOperations.length === ops.length}
                       onClick={selectAllCandidateOperations}
                       size="small"
                       type="link"
@@ -864,7 +871,7 @@ export function ObjectAuthorizeDrawer({
                       {t("systemAdmin.objectGrants.selectAllOperations")}
                     </AppButton>
                     <AppButton
-                      disabled={!candidateOperations.length}
+                      disabled={catalogLoading || !candidateOperations.length}
                       onClick={clearCandidateOperations}
                       size="small"
                       type="link"
@@ -894,6 +901,7 @@ export function ObjectAuthorizeDrawer({
                             ? styles.authzGrantOperationSelected
                             : styles.authzGrantOperation}
                           onClick={() => toggleCandidateOperation(operation.key)}
+                          disabled={catalogLoading}
                           type="button"
                         >
                           {operation.label}
@@ -949,7 +957,7 @@ export function ObjectAuthorizeDrawer({
                       : t("systemAdmin.objectGrants.grantBundleReady")}
               </span>
               <AppButton
-                disabled={!candidate || !candidateOperations.length}
+                disabled={catalogLoading || !candidate || !candidateOperations.length}
                 icon={<PlusOutlined />}
                 loading={busy}
                 onClick={() => void handleAdd()}
@@ -1075,6 +1083,7 @@ export function ObjectAuthorizeDrawer({
       title={drawerTitle}
       width="min(920px, calc(100vw - 24px))"
     >
+      <AuthorizationRegistryFailureAlert error={catalogError} onRetry={retryAuthorizationRegistry} />
       {content}
     </Drawer>
   );

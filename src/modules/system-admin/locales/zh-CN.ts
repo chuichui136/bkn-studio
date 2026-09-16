@@ -86,6 +86,7 @@ export const systemAdminZhCN = {
         concept_group: "概念分组",
         connector_type: "数据连接",
         data_flow: "数据流",
+        function: "函数",
         knowledge_network: "知识网络",
         large_model: "大模型",
         mcp: "MCP 服务",
@@ -130,6 +131,9 @@ export const systemAdminZhCN = {
       add: "添加授权",
       addOperation: "添加操作",
       operationsPlaceholder: "选择操作",
+    },
+    authorizationRegistry: {
+      loadFailed: "无法加载当前权限目录。请重试；目录加载成功前不能修改权限。",
     },
     authorize: {
       title: "授权 · {{name}}",
