@@ -86,6 +86,7 @@ export const systemAdminEnUS = {
         concept_group: "Concept group",
         connector_type: "Data connection",
         data_flow: "Data flow",
+        function: "Function",
         knowledge_network: "Knowledge network",
         large_model: "Large model",
         mcp: "MCP service",
@@ -130,6 +131,9 @@ export const systemAdminEnUS = {
       add: "Add grant",
       addOperation: "Add operation",
       operationsPlaceholder: "Pick operations",
+    },
+    authorizationRegistry: {
+      loadFailed: "Unable to load the current authorization catalog. Permission changes are unavailable until it is retried.",
     },
     authorize: {
       title: "Authorize · {{name}}",
