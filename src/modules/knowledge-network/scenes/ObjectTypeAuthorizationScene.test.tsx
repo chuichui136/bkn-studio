@@ -38,13 +38,14 @@ const mocks = vi.hoisted(() => ({
   },
   upsertObjectGrantForObject: vi.fn(),
 }));
+const translation = vi.hoisted(() => ({
+  i18n: { exists: () => false, language: "zh-CN" },
+  t: (key: string) => key,
+}));
 
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
-  useTranslation: () => ({
-    i18n: { exists: () => false },
-    t: (key: string) => key,
-  }),
+  useTranslation: () => translation,
 }));
 
 vi.mock("react-router-dom", async (importOriginal) => ({
