@@ -352,6 +352,27 @@ export function ObjectTypeAuthorizationScene() {
     void userLookupRevision;
     return userMap.get(id) ?? getCachedUserSync(id);
   }, [userLookupRevision, userMap]);
+  const resolveGrantSubject = useCallback((grant: ObjectGrant) => {
+    const id = grant.accessorId;
+    const user = directoryUser(id);
+    const name = grantGranteeLabel(grant, user);
+    const roleSubject = isRoleGrantSubject(grant);
+    const publicSubject = grant.accessorType === "public" || id === PUBLIC_ACCESSOR_ID;
+    return {
+      account: grant.accessorAccount || user?.account,
+      name: name || (publicSubject
+        ? t("systemAdmin.objectGrants.publicSubject")
+        : roleSubject
+        ? t("systemAdmin.objectGrants.roleSubject")
+        : pendingUserIds.has(id)
+        ? t("systemAdmin.objectGrants.granteeLoading")
+        : isDeletedUserSync(id)
+          ? t("systemAdmin.objectGrants.deletedUser")
+          : t("systemAdmin.objectGrants.granteeUnresolved")),
+      publicSubject,
+      roleSubject,
+    };
+  }, [directoryUser, pendingUserIds, t]);
   const roleMap = useMemo(() => new Map(roles.map((role) => [role.id, role])), [roles]);
   const currentSubjectRecord = subjectType === "user" ? userMap.get(subjectId ?? "") : roleMap.get(subjectId ?? "");
 
@@ -813,9 +834,7 @@ export function ObjectTypeAuthorizationScene() {
   };
 
   const sourceGrant = objectGrants.find((grant) => grant.accessorId === sourceAccessorId);
-  const sourceGrantee = sourceGrant
-    ? grantGranteeLabel(sourceGrant, directoryUser(sourceGrant.accessorId))
-    : undefined;
+  const sourceGrantee = sourceGrant ? resolveGrantSubject(sourceGrant).name : undefined;
   const sourceRows = collapseGrantSources(
     (sourceGrant?.grants ?? []).filter((source) => source.active),
   );
@@ -849,16 +868,32 @@ export function ObjectTypeAuthorizationScene() {
         .map((decision) => decision.operation)
       : grant.operations,
   );
+  const blockingDependentsForSource = (source: GrantSourceRow) => {
+    if (!sourceGrant || source.effect !== "allow") {
+      return [];
+    }
+    const remainingRequirementSource = (sourceGrant.grants ?? []).some(
+      (candidate) =>
+        candidate.active &&
+        candidate.effect === "allow" &&
+        candidate.operation === source.operation &&
+        !source.grantIds.includes(candidate.grantId),
+    );
+    if (remainingRequirementSource) {
+      return [];
+    }
+    const allowedOperations = allowedOperationsForGrant(sourceGrant);
+    return baseOps.filter(
+      (operation) =>
+        allowedOperations.has(operation.key) && operation.requires.includes(source.operation),
+    );
+  };
 
   const handleDeleteSource = (source: GrantSourceRow) => {
     if (!sourceGrant || !canRevoke || isProtectedBaseGrant(sourceGrant)) {
       return;
     }
-    const allowedOperations = allowedOperationsForGrant(sourceGrant);
-    const blockingDependents = baseOps.filter(
-      (operation) =>
-        allowedOperations.has(operation.key) && operation.requires.includes(source.operation),
-    );
+    const blockingDependents = blockingDependentsForSource(source);
     if (
       !source.active ||
       source.inherited ||
@@ -971,13 +1006,7 @@ export function ObjectTypeAuthorizationScene() {
       align: "right",
       key: "actions",
       render: (_value, source) => {
-        const allowedOperations = sourceGrant
-          ? allowedOperationsForGrant(sourceGrant)
-          : new Set<string>();
-        const blockingDependents = baseOps.filter(
-          (operation) =>
-            allowedOperations.has(operation.key) && operation.requires.includes(source.operation),
-        );
+        const blockingDependents = blockingDependentsForSource(source);
         const protectedGrant = sourceGrant ? isProtectedBaseGrant(sourceGrant) : true;
         const deleteDisabled =
           baseBusy ||
@@ -1031,20 +1060,7 @@ export function ObjectTypeAuthorizationScene() {
     {
       dataIndex: "accessorId",
       render: (id: string, grant: ObjectGrant) => {
-        const user = directoryUser(id);
-        const grantee = grantGranteeLabel(grant, user);
-        const account = grant.accessorAccount || user?.account;
-        const roleSubject = isRoleGrantSubject(grant);
-        const publicSubject = grant.accessorType === "public" || id === PUBLIC_ACCESSOR_ID;
-        const displayName = grantee || (publicSubject
-          ? t("systemAdmin.objectGrants.publicSubject")
-          : roleSubject
-          ? t("systemAdmin.objectGrants.roleSubject")
-          : pendingUserIds.has(id)
-          ? t("systemAdmin.objectGrants.granteeLoading")
-          : isDeletedUserSync(id)
-            ? t("systemAdmin.objectGrants.deletedUser")
-            : t("systemAdmin.objectGrants.granteeUnresolved"));
+        const { account, name: displayName, publicSubject, roleSubject } = resolveGrantSubject(grant);
         return (
           <div className={styles.subjectName}>
             <Avatar icon={publicSubject ? <GlobalOutlined /> : roleSubject ? <TeamOutlined /> : <UserOutlined />} size={34} />

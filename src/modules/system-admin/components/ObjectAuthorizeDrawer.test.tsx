@@ -526,6 +526,35 @@ describe("ObjectAuthorizeDrawer source records", () => {
     expect((deleteActions[1].closest("button") as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("allows one duplicate prerequisite source to be revoked", async () => {
+    const duplicateGrant = grant([
+      source({ grantId: "grant-view-a" }),
+      source({ createdBy: "u-other", grantId: "grant-view-b" }),
+      source({ grantId: "grant-resource-manage", operation: "resource_manage" }),
+    ]);
+    duplicateGrant.effectiveDecisions = [
+      { basis: "direct", decision: "allow", operation: "view_detail", requires: [] },
+      {
+        basis: "direct",
+        decision: "allow",
+        operation: "resource_manage",
+        requires: ["view_detail"],
+      },
+    ];
+    mocks.listObjectGrantsForObject.mockResolvedValue({ accounts: [], grants: [duplicateGrant] });
+    render(<ObjectAuthorizeDrawer objId="catalog-1" objName="Customer catalog" objType="catalog" onClose={vi.fn()} open />);
+    await act(async () => {});
+
+    fireEvent.click(screen.getByText("common.viewDetails"));
+    const deleteActions = screen.getAllByText("systemAdmin.objectGrants.deleteGrant");
+    expect((deleteActions[0].closest("button") as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(deleteActions[0]);
+    const confirm = appServices.modal.confirm.mock.calls[0]?.[0] as { onOk: () => Promise<void> };
+    await confirm.onOk();
+
+    expect(mocks.revokeObjectGrantForObject).toHaveBeenCalledWith("grant-view-a");
+  });
+
   it("keeps a grant-only owner scoped to its own sources beside authorize", async () => {
     const publicAccessorId = "00000000-0000-0000-0000-000000000000";
     appServices.runtimeConfig.currentUser.id = "u-owner";

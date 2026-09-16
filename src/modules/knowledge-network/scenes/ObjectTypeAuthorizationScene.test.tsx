@@ -242,6 +242,133 @@ describe("ObjectTypeAuthorizationScene", () => {
     }));
   });
 
+  it("uses the public subject label in the source drawer", async () => {
+    mocks.getDetail.mockResolvedValue({
+      color: "#356af6",
+      conceptGroupIds: [],
+      conceptGroupNames: [],
+      dataProperties: [],
+      description: "",
+      displayKey: "",
+      hasIndex: false,
+      id: "object-1",
+      incrementalKey: "",
+      logicProperties: [],
+      name: "Customer",
+      operations: ["view_detail"],
+      primaryKeys: [],
+      tags: [],
+      updateTime: "",
+      updaterName: "",
+    });
+    const publicAccessorId = "00000000-0000-0000-0000-000000000000";
+    mocks.listObjectGrantsForObject.mockResolvedValue({
+      accounts: [],
+      grants: [{
+        accessorId: publicAccessorId,
+        accessorType: "public",
+        grants: [{
+          accessorId: publicAccessorId,
+          active: true,
+          authoritySource: "admin_authz",
+          effect: "allow",
+          grantId: "grant-public-view",
+          inherited: false,
+          operation: "view_detail",
+          policySource: "professional_rule",
+        }],
+        objId: "network-1/object-1",
+        objName: "Customer",
+        objSub: "network-1",
+        objType: "object_type",
+        operations: ["view_detail"],
+      }],
+    });
+
+    render(<ObjectTypeAuthorizationScene />);
+
+    const row = (await screen.findByText("systemAdmin.objectGrants.publicSubject")).closest("tr");
+    fireEvent.click(within(row as HTMLElement).getByText("common.viewDetails"));
+    const sourceDrawer = await screen.findByRole("dialog");
+    expect(within(sourceDrawer).getByText(
+      /systemAdmin\.objectGrants\.publicSubject \/ systemAdmin\.objectGrants\.grantSource/,
+    )).not.toBeNull();
+    expect(within(sourceDrawer).queryByText(publicAccessorId)).toBeNull();
+  });
+
+  it("allows an owner to revoke one duplicate prerequisite source", async () => {
+    mocks.getDetail.mockResolvedValue({
+      color: "#356af6",
+      conceptGroupIds: [],
+      conceptGroupNames: [],
+      dataProperties: [],
+      description: "",
+      displayKey: "",
+      hasIndex: false,
+      id: "object-1",
+      incrementalKey: "",
+      logicProperties: [],
+      name: "Customer",
+      operations: ["view_detail", "modify"],
+      primaryKeys: [],
+      tags: [],
+      updateTime: "",
+      updaterName: "",
+    });
+    const owner = {
+      account: "owner.b",
+      accountType: "local",
+      email: "",
+      enabled: true,
+      id: "u-owner",
+      name: "Owner B",
+      roleIds: [],
+      telephone: "",
+    };
+    mocks.listUsersPage.mockResolvedValue({ users: [owner] });
+    mocks.listObjectGrantsForObject.mockResolvedValue({
+      accounts: [owner],
+      grants: [{
+        accessorId: "u-owner",
+        grants: [
+          {
+            accessorId: "u-owner", active: true, authoritySource: "owner_delegate", createdBy: "u-owner",
+            effect: "allow", grantId: "grant-view-owner", inherited: false, operation: "view_detail",
+            policySource: "professional_rule",
+          },
+          {
+            accessorId: "u-owner", active: true, authoritySource: "owner_delegate", createdBy: "u-other",
+            effect: "allow", grantId: "grant-view-other", inherited: false, operation: "view_detail",
+            policySource: "professional_rule",
+          },
+          {
+            accessorId: "u-owner", active: true, authoritySource: "owner_delegate", createdBy: "u-owner",
+            effect: "allow", grantId: "grant-modify-owner", inherited: false, operation: "modify",
+            policySource: "professional_rule",
+          },
+        ],
+        objId: "network-1/object-1",
+        objName: "Customer",
+        objSub: "network-1",
+        objType: "object_type",
+        operations: ["view_detail", "modify"],
+      }],
+    });
+
+    render(<ObjectTypeAuthorizationScene />);
+
+    const row = (await screen.findByText("Owner B")).closest("tr");
+    fireEvent.click(within(row as HTMLElement).getByText("common.viewDetails"));
+    const sourceDrawer = await screen.findByRole("dialog");
+    const deleteActions = within(sourceDrawer).getAllByText("systemAdmin.objectGrants.deleteGrant");
+    expect((deleteActions[0].closest("button") as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(deleteActions[0]);
+    const confirm = mocks.appServices.modal.confirm.mock.calls[0]?.[0] as { onOk: () => Promise<void> };
+    await act(async () => confirm.onOk());
+
+    expect(mocks.revokeObjectGrantsForObject).toHaveBeenCalledWith(["grant-view-owner"]);
+  });
+
   it("replaces the managed source with the full edited operation set", async () => {
     mocks.getDetail.mockResolvedValue({
       color: "#356af6",

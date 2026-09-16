@@ -471,7 +471,20 @@ export function ObjectAuthorizeDrawer({
         !(protection.selfAuthorizeLocked && source.operation === "authorize");
     });
 
-  const dependentOperationsForGrant = (grant: ObjectGrant | undefined, requirementKey: string) => {
+  const dependentOperationsForGrant = (grant: ObjectGrant | undefined, source: GrantRecord) => {
+    if (source.effect !== "allow") {
+      return [];
+    }
+    const remainingRequirementSource = (grant?.grants ?? []).some(
+      (candidate) =>
+        candidate.active &&
+        candidate.effect === "allow" &&
+        candidate.operation === source.operation &&
+        candidate.grantId !== source.grantId,
+    );
+    if (remainingRequirementSource) {
+      return [];
+    }
     const allowedOperations = new Set(
       grant ? decisionsForGrant(grant)
         .filter((decision) => decision.decision === "allow")
@@ -479,7 +492,7 @@ export function ObjectAuthorizeDrawer({
     );
     return ops.filter(
       (operation) =>
-        allowedOperations.has(operation.key) && operation.requires.includes(requirementKey),
+        allowedOperations.has(operation.key) && operation.requires.includes(source.operation),
     );
   };
 
@@ -489,8 +502,8 @@ export function ObjectAuthorizeDrawer({
     }
     const sources = revocableSourcesForGrant(grant).sort(
       (left, right) =>
-        dependentOperationsForGrant(grant, left.operation).length -
-        dependentOperationsForGrant(grant, right.operation).length,
+        dependentOperationsForGrant(grant, left).length -
+        dependentOperationsForGrant(grant, right).length,
     );
     if (!canRevoke || !sources.length) {
       return;
@@ -526,7 +539,7 @@ export function ObjectAuthorizeDrawer({
     if (
       !grant ||
       !canManageGrantSource({ currentUserId, isPlatformAuthzAdmin: isPlatformAuthzRevoker, source }) ||
-      dependentOperationsForGrant(grant, source.operation).length
+      dependentOperationsForGrant(grant, source).length
     ) {
       return;
     }
@@ -802,10 +815,7 @@ export function ObjectAuthorizeDrawer({
           candidateOperation.key === source.operation);
         const revocable = canRevoke && revocableSourcesForGrant(sourceGrant)
           .some((candidateSource) => candidateSource.grantId === source.grantId);
-        const blockingDependents = dependentOperationsForGrant(
-          sourceGrant,
-          source.operation,
-        );
+        const blockingDependents = dependentOperationsForGrant(sourceGrant, source);
         const deletionBlocked = blockingDependents.length > 0;
         return revocable ? (
           <Tooltip
