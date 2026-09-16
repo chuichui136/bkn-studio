@@ -284,6 +284,8 @@ export const systemAdminZhCN = {
       permissionNotGranted: "未授予",
       granteeLoading: "正在加载用户信息…",
       granteeUnresolved: "用户信息无法解析",
+      roleSubject: "角色",
+      publicSubject: "公开访问",
       deletedUser: "已删除用户",
       creatorNotRecorded: "未记录",
       retryGranteeLookup: "重试",

@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GrantRecord, ObjectGrant } from "@/modules/system-admin/types/authz";
+import { PUBLIC_ACCESSOR_ID } from "@/modules/system-admin/utils/object-grant-guards";
 
 const mocks = vi.hoisted(() => ({
   getCachedUserSync: vi.fn(),
@@ -234,6 +235,45 @@ describe("ObjectAuthorizeDrawer source records", () => {
     expect(screen.getByText("systemAdmin.objectGrants.deletedUser")).not.toBeNull();
     expect(screen.queryByText("u-mate")).toBeNull();
     expect(screen.queryByText("systemAdmin.objectGrants.retryGranteeLookup")).toBeNull();
+  });
+
+  it("renders a role subject without looking it up as a deleted user", async () => {
+    mocks.getCachedUserSync.mockReturnValue(undefined);
+    mocks.isDeletedUserSync.mockImplementation((id: string) => id === "role-readers");
+    mocks.listObjectGrantsForObject.mockResolvedValue({
+      accounts: [],
+      grants: [grant([source({ accessorId: "role-readers" })], {
+        accessorId: "role-readers",
+        accessorName: "Readers",
+        accessorType: "role",
+      })],
+    });
+
+    render(<ObjectAuthorizeDrawer objId="catalog-1" objName="Customer catalog" objType="catalog" onClose={vi.fn()} open />);
+    await act(async () => {});
+
+    expect(screen.getByText("Readers")).not.toBeNull();
+    expect(screen.queryByText("systemAdmin.objectGrants.deletedUser")).toBeNull();
+    expect(mocks.hydrateUserLookupDetails).toHaveBeenCalledWith([]);
+  });
+
+  it("renders the public subject without looking it up as a deleted user", async () => {
+    mocks.getCachedUserSync.mockReturnValue(undefined);
+    mocks.isDeletedUserSync.mockImplementation((id: string) => id === PUBLIC_ACCESSOR_ID);
+    mocks.listObjectGrantsForObject.mockResolvedValue({
+      accounts: [],
+      grants: [grant([source({ accessorId: PUBLIC_ACCESSOR_ID })], {
+        accessorId: PUBLIC_ACCESSOR_ID,
+        accessorType: "public",
+      })],
+    });
+
+    render(<ObjectAuthorizeDrawer objId="catalog-1" objName="Customer catalog" objType="catalog" onClose={vi.fn()} open />);
+    await act(async () => {});
+
+    expect(screen.getByText("systemAdmin.objectGrants.publicSubject")).not.toBeNull();
+    expect(screen.queryByText("systemAdmin.objectGrants.deletedUser")).toBeNull();
+    expect(mocks.hydrateUserLookupDetails).toHaveBeenCalledWith([]);
   });
 
   it("revokes one direct source by stable grant_id", async () => {

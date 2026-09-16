@@ -63,6 +63,7 @@ describe("object-grant backend contract", () => {
   it("keeps source records and effective decisions separate", () => {
     const result = mapObjectGrantEntry({
       accessor_id: "user-1",
+      accessor_type: "role",
       denied_operations: ["modify"],
       effective_decisions: [{
         basis: "requires",
@@ -103,6 +104,7 @@ describe("object-grant backend contract", () => {
       "grant-deny-view",
     ]);
     expect(result.grants?.[0]?.createdBy).toBe("admin-1");
+    expect(result.accessorType).toBe("role");
     expect(result.effectiveDecisions).toEqual([
       expect.objectContaining({
         basis: "requires",

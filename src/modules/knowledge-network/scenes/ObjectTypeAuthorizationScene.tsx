@@ -8,6 +8,7 @@
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
+  GlobalOutlined,
   InfoCircleOutlined,
   LockOutlined,
   PlusOutlined,
@@ -94,6 +95,9 @@ import { HIDDEN_INSTANCE_OPS } from "@/modules/system-admin/utils/authz-catalog"
 import {
   canManageGrantSource,
   grantCreatorUserId,
+  PUBLIC_ACCESSOR_ID,
+  isRoleGrantSubject,
+  isUserDirectorySubject,
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
 } from "@/modules/system-admin/utils/object-grant-guards";
@@ -221,7 +225,7 @@ export function ObjectTypeAuthorizationScene() {
       setUsers(directoryUsers);
       setRoles(roleResult ?? []);
       await syncUserLookup(grantResult.grants.flatMap((grant) => [
-        grant.accessorId,
+        ...(isUserDirectorySubject(grant) ? [grant.accessorId] : []),
         ...(grant.grants ?? []).flatMap((source) => grantCreatorUserId(source) ?? []),
       ]));
     } catch (error) {
@@ -1042,14 +1046,20 @@ export function ObjectTypeAuthorizationScene() {
         const user = directoryUser(id);
         const grantee = grantGranteeLabel(grant, user);
         const account = grant.accessorAccount || user?.account;
-        const displayName = grantee || (pendingUserIds.has(id)
+        const roleSubject = isRoleGrantSubject(grant);
+        const publicSubject = grant.accessorType === "public" || id === PUBLIC_ACCESSOR_ID;
+        const displayName = grantee || (publicSubject
+          ? t("systemAdmin.objectGrants.publicSubject")
+          : roleSubject
+          ? t("systemAdmin.objectGrants.roleSubject")
+          : pendingUserIds.has(id)
           ? t("systemAdmin.objectGrants.granteeLoading")
           : isDeletedUserSync(id)
             ? t("systemAdmin.objectGrants.deletedUser")
             : t("systemAdmin.objectGrants.granteeUnresolved"));
         return (
           <div className={styles.subjectName}>
-            <Avatar icon={<UserOutlined />} size={34} />
+            <Avatar icon={publicSubject ? <GlobalOutlined /> : roleSubject ? <TeamOutlined /> : <UserOutlined />} size={34} />
             <span>
               <strong>{displayName}</strong>
               {account ? <small>{account}</small> : null}

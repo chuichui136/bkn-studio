@@ -15,9 +15,11 @@ import {
   DatabaseOutlined,
   DeploymentUnitOutlined,
   FunctionOutlined,
+  GlobalOutlined,
   InfoCircleOutlined,
   LockOutlined,
   PlusOutlined,
+  TeamOutlined,
   ToolOutlined,
   UserOutlined,
 } from "@ant-design/icons";
@@ -59,6 +61,9 @@ import {
 import {
   canManageGrantSource,
   grantCreatorUserId,
+  PUBLIC_ACCESSOR_ID,
+  isRoleGrantSubject,
+  isUserDirectorySubject,
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
 } from "@/modules/system-admin/utils/object-grant-guards";
@@ -244,7 +249,7 @@ export function ObjectAuthorizeDrawer({
       setGrants(grantList);
       setUnresolvedLookupIds(new Set());
       await syncLookup(grantList.flatMap((grant) => [
-        grant.accessorId,
+        ...(isUserDirectorySubject(grant) ? [grant.accessorId] : []),
         ...(grant.grants ?? []).flatMap((source) => grantCreatorUserId(source) ?? []),
       ]));
       if (enterpriseAvailable) {
@@ -278,6 +283,16 @@ export function ObjectAuthorizeDrawer({
     (grant: ObjectGrant) => {
       void lookupRevision;
       const id = grant.accessorId;
+      if (grant.accessorType === "public" || id === PUBLIC_ACCESSOR_ID) {
+        return { id, name: t("systemAdmin.objectGrants.publicSubject"), type: "public" as const };
+      }
+      if (isRoleGrantSubject(grant)) {
+        return {
+          id,
+          name: grant.accessorName || t("systemAdmin.objectGrants.roleSubject"),
+          type: "role" as const,
+        };
+      }
       if (grant.accessorName || grant.accessorAccount) {
         return {
           id,
@@ -531,7 +546,7 @@ export function ObjectAuthorizeDrawer({
         return (
           <div className={styles.authzSubjectCell}>
             <span className={styles.authzAvatar}>
-              {grantee.type === "department" ? <AppstoreOutlined /> : <UserOutlined />}
+              {grantee.type === "department" ? <AppstoreOutlined /> : grantee.type === "role" ? <TeamOutlined /> : grantee.type === "public" ? <GlobalOutlined /> : <UserOutlined />}
             </span>
             <span>
               <strong>{grantee.name}</strong>

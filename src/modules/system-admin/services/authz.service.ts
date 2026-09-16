@@ -487,6 +487,7 @@ type BackendEntry = {
   accessor_id?: string;
   accessor_account?: string;
   accessor_name?: string;
+  accessor_type?: ObjectGrant["accessorType"];
   bundle?: "full_business_access";
   denied_operations?: string[];
   effective_decisions?: BackendEffectiveDecision[];
@@ -559,6 +560,7 @@ export function mapObjectGrantEntry(item: BackendEntry): ObjectGrant {
     accessorId,
     accessorAccount: item.accessor_account,
     accessorName: item.accessor_name,
+    accessorType: item.accessor_type,
     bundle: item.bundle,
     deniedOperations: item.denied_operations ?? [],
     effectiveDecisions: (item.effective_decisions ?? []).map(mapEffectiveDecision),

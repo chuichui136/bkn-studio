@@ -284,6 +284,8 @@ export const systemAdminEnUS = {
       permissionNotGranted: "Not granted",
       granteeLoading: "Loading user information…",
       granteeUnresolved: "User information unavailable",
+      roleSubject: "Role",
+      publicSubject: "Public access",
       deletedUser: "Deleted user",
       creatorNotRecorded: "Not recorded",
       retryGranteeLookup: "Retry",

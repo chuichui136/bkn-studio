@@ -29,6 +29,23 @@ export function grantCreatorUserId(source: GrantRecord): string | undefined {
 }
 
 /**
+ * New object-scoped responses identify role subjects explicitly. The source
+ * fallback keeps Studio safe during a rolling deployment against an older
+ * bkn-safe: direct role permissions always carry the protected role source.
+ */
+export function isRoleGrantSubject(grant: ObjectGrant) {
+  return grant.accessorType === "role" ||
+    (grant.grants ?? []).some((source) => source.policySource === "role_permission");
+}
+
+/** Only real users may be resolved through the user-directory API. */
+export function isUserDirectorySubject(grant: ObjectGrant) {
+  return grant.accessorType !== "public" &&
+    grant.accessorId !== PUBLIC_ACCESSOR_ID &&
+    !isRoleGrantSubject(grant);
+}
+
+/**
  * Whether bkn-safe will refuse a non-administrator write against this target
  * regardless of source ownership.
  *

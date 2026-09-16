@@ -11,6 +11,8 @@ import type { GrantRecord, ObjectGrant } from "@/modules/system-admin/types/auth
 import {
   canManageGrantSource,
   grantCreatorUserId,
+  isRoleGrantSubject,
+  isUserDirectorySubject,
   PUBLIC_ACCESSOR_ID,
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
@@ -128,5 +130,25 @@ describe("grantCreatorUserId", () => {
     expect(grantCreatorUserId(source("owner_delegate"))).toBeUndefined();
     expect(grantCreatorUserId(source("system:migration"))).toBeUndefined();
     expect(grantCreatorUserId(source())).toBeUndefined();
+  });
+});
+
+describe("isRoleGrantSubject", () => {
+  it("recognizes both the current response field and older role-permission rows", () => {
+    const ordinary = grant("u-mate", ["view_detail"]);
+    expect(isRoleGrantSubject({ ...ordinary, accessorType: "role" })).toBe(true);
+    expect(isRoleGrantSubject({
+      ...ordinary,
+      grants: [{ ...source(), policySource: "role_permission" }],
+    })).toBe(true);
+    expect(isRoleGrantSubject(ordinary)).toBe(false);
+  });
+});
+
+describe("isUserDirectorySubject", () => {
+  it("excludes role and public subjects from user-directory lookup", () => {
+    expect(isUserDirectorySubject({ ...grant("u-mate", ["view_detail"]), accessorType: "role" })).toBe(false);
+    expect(isUserDirectorySubject(grant(PUBLIC_ACCESSOR_ID, ["view_detail"]))).toBe(false);
+    expect(isUserDirectorySubject(grant("u-mate", ["view_detail"]))).toBe(true);
   });
 });
