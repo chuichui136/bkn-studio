@@ -22,9 +22,41 @@ permissions:
   contents: read
 
 jobs:
+  unit-tests:
+    name: Unit tests (${{ matrix.shard }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/4, 2/4, 3/4, 4/4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Each shard starts a fresh Node process. This bounds worker-local module,
+      # DOM and mock retention while identifying a failing shard for follow-up.
+      - name: Unit tests
+        run: pnpm exec vitest --run --shard=${{ matrix.shard }}
+
   quality:
     name: ci-quality
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    needs: unit-tests
+    if: >-
+      always() &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -42,6 +74,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Keep the protected ci-quality check red if any test shard failed.
+      - name: Verify unit test shards
+        if: needs.unit-tests.result != 'success'
+        run: exit 1
+
       - name: License header check
         run: node scripts/check-license-headers.mjs
 
@@ -56,9 +93,6 @@ jobs:
 
       - name: Theme surface checks
         run: pnpm run theme:scan-surfaces
-
-      - name: Unit tests
-        run: pnpm exec vitest --run
 
       - name: Type check
         run: pnpm exec tsc -b --pretty false
