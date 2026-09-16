@@ -7,7 +7,7 @@
 
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Checkbox, Empty, Input, Select, Tag, Tooltip } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AppButton } from "@/framework/ui/common/AppButton";
@@ -15,7 +15,7 @@ import { AuthorizationRegistryFailureAlert } from "@/modules/system-admin/compon
 import type { ResourceGrant, ResourceRef } from "@/modules/system-admin/types/admin";
 import {
   operationLabel,
-  ROLE_GRANT_RESOURCE_TYPES,
+  isRoleGrantResourceType,
   resourceTypeLabel,
   WILDCARD,
 } from "@/modules/system-admin/utils/resource-catalog";
@@ -60,25 +60,49 @@ export function ResourceGrantEditor({
     catalogError,
     catalogLoading,
     operationsForType,
+    resourceTypeOptions,
     retryAuthorizationRegistry,
   } = useAuthorizationRegistry();
   const [draftType, setDraftType] = useState<string>(
-    lockedResource?.type ?? ROLE_GRANT_RESOURCE_TYPES[0].type,
+    lockedResource?.type ?? "",
   );
   const [draftId, setDraftId] = useState<string>(lockedResource?.id ?? "");
   const [wholeType, setWholeType] = useState<boolean>(!lockedResource);
   const [draftOps, setDraftOps] = useState<string[]>([]);
   const [addingGrantKey, setAddingGrantKey] = useState<string | null>(null);
 
+  const roleResourceTypeOptions = useMemo(
+    () => resourceTypeOptions().filter((option) => isRoleGrantResourceType(option.value)),
+    [resourceTypeOptions],
+  );
   const ops = useMemo(() => operationsForType(draftType), [draftType, operationsForType]);
-  const registryReady = Boolean(catalog) && !catalogLoading && !catalogError;
+  const registryReady = Boolean(catalog?.resourceTypes.length) && !catalogLoading && !catalogError;
   const canEdit = !disabled && registryReady;
+  const draftContractReady = ops.length > 0;
+
+  useEffect(() => {
+    if (lockedResource || !registryReady) return;
+    if (!roleResourceTypeOptions.some((option) => option.value === draftType)) {
+      setDraftType(roleResourceTypeOptions[0]?.value ?? "");
+      setDraftOps([]);
+    }
+  }, [draftType, lockedResource, registryReady, roleResourceTypeOptions]);
+
+  const canEditGrant = (grant: ResourceGrant) => {
+    if (!canEdit) return false;
+    const definitions = operationsForType(grant.resource.type);
+    const definedOperations = new Set(definitions.map((operation) => operation.key));
+    return definitions.length > 0 && grant.operations.every(
+      (operation) => operation === WILDCARD || definedOperations.has(operation),
+    );
+  };
 
   const resolvedId = lockedResource ? lockedResource.id : wholeType ? WILDCARD : draftId.trim();
 
   const addGrant = () => {
     if (
       !canEdit ||
+      !draftContractReady ||
       !draftOps.length ||
       (!lockedResource && !wholeType && (typeWideOnly || !draftId.trim()))
     ) {
@@ -101,12 +125,12 @@ export function ResourceGrantEditor({
   };
 
   const removeGrant = (grant: ResourceGrant) => {
-    if (!canEdit) return;
+    if (!canEditGrant(grant)) return;
     onChange(value.filter((item) => item !== grant));
   };
 
   const addOperation = (grant: ResourceGrant, operation: string) => {
-    if (!canEdit) return;
+    if (!canEditGrant(grant)) return;
     const definitions = operationsForType(grant.resource.type);
     onChange(value.map((item) =>
       sameResource(item.resource, grant.resource)
@@ -117,7 +141,7 @@ export function ResourceGrantEditor({
   };
 
   const removeOperation = (grant: ResourceGrant, operation: string) => {
-    if (!canEdit) return;
+    if (!canEditGrant(grant)) return;
     const definitions = operationsForType(grant.resource.type);
     const removed = new Set([operation]);
     for (const definition of definitions) {
@@ -137,70 +161,74 @@ export function ResourceGrantEditor({
     <div className={styles.grantEditor}>
       {value.length ? (
         <div className={styles.grantList}>
-          {value.map((grant, index) => (
-            <div className={styles.grantItem} key={`${grant.resource.type}:${grant.resource.id}:${index}`}>
-              <div className={styles.grantMeta}>
-                <Tag className={styles.roleTag}>{resourceTypeLabel(grant.resource.type)}</Tag>
-                <span className={styles.slugChip}>
-                  {grant.resource.id === WILDCARD ? t("systemAdmin.grant.wholeType") : grant.resource.id}
-                </span>
-              </div>
-              <div className={styles.chipRow}>
-                {grant.operations.map((op) => (
-                  <Tag
-                    closable={canEdit}
-                    className={styles.permChip}
-                    key={op}
-                    onClose={(event) => {
-                      event.preventDefault();
-                      if (canEdit) removeOperation(grant, op);
-                    }}
-                  >
-                    {grant.resource.id === WILDCARD || op === "*"
-                      ? op === "*"
-                        ? t("systemAdmin.grant.allOps")
+          {value.map((grant, index) => {
+            const grantCanEdit = canEditGrant(grant);
+            return (
+              <div className={styles.grantItem} key={`${grant.resource.type}:${grant.resource.id}:${index}`}>
+                <div className={styles.grantMeta}>
+                  <Tag className={styles.roleTag}>{resourceTypeLabel(grant.resource.type)}</Tag>
+                  <span className={styles.slugChip}>
+                    {grant.resource.id === WILDCARD ? t("systemAdmin.grant.wholeType") : grant.resource.id}
+                  </span>
+                </div>
+                <div className={styles.chipRow}>
+                  {grant.operations.map((op) => (
+                    <Tag
+                      closable={grantCanEdit}
+                      className={styles.permChip}
+                      key={op}
+                      onClose={(event) => {
+                        event.preventDefault();
+                        if (grantCanEdit) removeOperation(grant, op);
+                      }}
+                    >
+                      {grant.resource.id === WILDCARD || op === "*"
+                        ? op === "*"
+                          ? t("systemAdmin.grant.allOps")
+                          : operationLabel(grant.resource.type, op)
                         : operationLabel(grant.resource.type, op)
-                      : operationLabel(grant.resource.type, op)}
-                  </Tag>
-                ))}
-                {canEdit && !grant.operations.includes("*") ? (
-                  addingGrantKey === `${grant.resource.type}:${grant.resource.id}:${index}` ? (
-                    <Select
-                      autoFocus
-                      onBlur={() => setAddingGrantKey(null)}
-                      onSelect={(operation: string) => addOperation(grant, operation)}
-                      options={operationsForType(grant.resource.type)
-                        .filter((operation) => !grant.operations.includes(operation.key))
-                        .map((operation) => ({ label: operation.label, value: operation.key }))}
-                      placeholder={t("systemAdmin.grant.operationsPlaceholder")}
-                      size="small"
-                      style={{ minWidth: 150 }}
-                    />
-                  ) : (
-                    <Tooltip title={t("systemAdmin.grant.addOperation")}>
-                      <AppButton
-                        icon={<PlusOutlined />}
-                        onClick={() => setAddingGrantKey(`${grant.resource.type}:${grant.resource.id}:${index}`)}
+                      }
+                    </Tag>
+                  ))}
+                  {grantCanEdit && !grant.operations.includes("*") ? (
+                    addingGrantKey === `${grant.resource.type}:${grant.resource.id}:${index}` ? (
+                      <Select
+                        autoFocus
+                        onBlur={() => setAddingGrantKey(null)}
+                        onSelect={(operation: string) => addOperation(grant, operation)}
+                        options={operationsForType(grant.resource.type)
+                          .filter((operation) => !grant.operations.includes(operation.key))
+                          .map((operation) => ({ label: operation.label, value: operation.key }))}
+                        placeholder={t("systemAdmin.grant.operationsPlaceholder")}
                         size="small"
-                        type="link"
-                      >
-                        {t("systemAdmin.grant.addOperation")}
-                      </AppButton>
-                    </Tooltip>
-                  )
+                        style={{ minWidth: 150 }}
+                      />
+                    ) : (
+                      <Tooltip title={t("systemAdmin.grant.addOperation")}>
+                        <AppButton
+                          icon={<PlusOutlined />}
+                          onClick={() => setAddingGrantKey(`${grant.resource.type}:${grant.resource.id}:${index}`)}
+                          size="small"
+                          type="link"
+                        >
+                          {t("systemAdmin.grant.addOperation")}
+                        </AppButton>
+                      </Tooltip>
+                    )
+                  ) : null}
+                </div>
+                {grantCanEdit ? (
+                  <AppButton
+                    className={[styles.actionLink, styles.actionDanger].join(" ")}
+                    icon={<DeleteOutlined />}
+                    onClick={() => removeGrant(grant)}
+                    size="small"
+                    type="link"
+                  />
                 ) : null}
               </div>
-              {canEdit ? (
-                <AppButton
-                  className={[styles.actionLink, styles.actionDanger].join(" ")}
-                  icon={<DeleteOutlined />}
-                  onClick={() => removeGrant(grant)}
-                  size="small"
-                  type="link"
-                />
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <Empty
@@ -222,12 +250,7 @@ export function ResourceGrantEditor({
                     setDraftType(type);
                     setDraftOps([]);
                   }}
-                  options={ROLE_GRANT_RESOURCE_TYPES
-                    .filter((item) => catalog?.resourceTypes.some((resourceType) => resourceType.id === item.type))
-                    .map((item) => ({
-                      label: resourceTypeLabel(item.type),
-                      value: item.type,
-                    }))}
+                  options={roleResourceTypeOptions}
                   style={{ minWidth: 160 }}
                   value={draftType}
                 />
@@ -256,7 +279,7 @@ export function ResourceGrantEditor({
               </>
             ) : null}
             <Select
-              disabled={!canEdit}
+              disabled={!canEdit || !draftContractReady}
               mode="multiple"
               onChange={(selected) => setDraftOps(normalizeOperations(selected, ops))}
               options={ops.map((op) => ({ label: op.label, value: op.key }))}
@@ -264,7 +287,7 @@ export function ResourceGrantEditor({
               style={{ flex: 1, minWidth: 200 }}
               value={draftOps}
             />
-            <AppButton disabled={!canEdit} icon={<PlusOutlined />} onClick={addGrant} type="primary">
+            <AppButton disabled={!canEdit || !draftContractReady} icon={<PlusOutlined />} onClick={addGrant} type="primary">
               {t("systemAdmin.grant.add")}
             </AppButton>
           </div>

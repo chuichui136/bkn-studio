@@ -7,18 +7,25 @@
 
 import { createElement } from "react";
 import { render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const registryMocks = vi.hoisted(() => ({
+  catalog: undefined as undefined | { resourceTypes: Array<{ id: string }> },
+  catalogLoading: true,
+  operationsForType: vi.fn<() => Array<{ key: string; label: string; requires: string[] }>>(
+    () => [],
+  ),
+  resourceTypeOptions: vi.fn<() => Array<{ label: string; value: string }>>(() => []),
   retryAuthorizationRegistry: vi.fn(),
 }));
 
 vi.mock("@/modules/system-admin/hooks/use-authorization-registry", () => ({
   useAuthorizationRegistry: () => ({
-    catalog: undefined,
+    catalog: registryMocks.catalog,
     catalogError: undefined,
-    catalogLoading: true,
-    operationsForType: () => [],
+    catalogLoading: registryMocks.catalogLoading,
+    operationsForType: registryMocks.operationsForType,
+    resourceTypeOptions: registryMocks.resourceTypeOptions,
     retryAuthorizationRegistry: registryMocks.retryAuthorizationRegistry,
   }),
 }));
@@ -40,6 +47,13 @@ const catalogGrant: ResourceGrant = {
 };
 
 describe("ResourceGrantEditor operation changes", () => {
+  beforeEach(() => {
+    registryMocks.catalog = undefined;
+    registryMocks.catalogLoading = true;
+    registryMocks.operationsForType.mockReturnValue([]);
+    registryMocks.resourceTypeOptions.mockReturnValue([]);
+  });
+
   it("clears the stale wildcard when switching from all resources to a specific scope", () => {
     let draftId = "*";
     let wholeType = true;
@@ -77,6 +91,21 @@ describe("ResourceGrantEditor operation changes", () => {
   });
 
   it("locks existing grants until the authorization registry is ready", () => {
+    const { container } = render(createElement(ResourceGrantEditor, {
+      onChange: vi.fn(),
+      value: [catalogGrant],
+    }));
+
+    expect(container.querySelector(".ant-tag-close-icon")).toBeNull();
+    expect(container.querySelector(".ant-btn-dangerous")).toBeNull();
+  });
+
+  it("keeps a grant locked when its resource contract is absent", () => {
+    registryMocks.catalog = { resourceTypes: [{ id: "resource" }] };
+    registryMocks.catalogLoading = false;
+    registryMocks.operationsForType.mockImplementation(() => []);
+    registryMocks.resourceTypeOptions.mockReturnValue([{ label: "Data resource", value: "resource" }]);
+
     const { container } = render(createElement(ResourceGrantEditor, {
       onChange: vi.fn(),
       value: [catalogGrant],

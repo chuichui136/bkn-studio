@@ -86,6 +86,7 @@ export const systemAdminEnUS = {
         concept_group: "Concept group",
         connector_type: "Data connection",
         data_flow: "Data flow",
+        function: "Function",
         knowledge_network: "Knowledge network",
         large_model: "Large model",
         mcp: "MCP service",

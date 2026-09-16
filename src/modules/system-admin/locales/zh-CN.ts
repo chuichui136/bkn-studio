@@ -86,6 +86,7 @@ export const systemAdminZhCN = {
         concept_group: "概念分组",
         connector_type: "数据连接",
         data_flow: "数据流",
+        function: "函数",
         knowledge_network: "知识网络",
         large_model: "大模型",
         mcp: "MCP 服务",

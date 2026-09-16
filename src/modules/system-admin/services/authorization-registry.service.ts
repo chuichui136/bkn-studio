@@ -79,23 +79,44 @@ export type BackendAuthorizationRegistry = {
 };
 
 export function normalizeAuthorizationRegistry(input: BackendAuthorizationRegistry): AuthorizationRegistry {
-  return {
-    resourceTypes: (input.resource_types ?? [])
-      .filter((resourceType) => Boolean(resourceType.id))
-      .map((resourceType) => ({
-        id: resourceType.id as string,
-        name: resourceType.name || (resourceType.id as string),
-        parentType: resourceType.parent_type || undefined,
-        operations: (resourceType.operations ?? [])
-          .filter((operation) => Boolean(operation.id))
-          .map((operation) => ({
-            id: operation.id as string,
-            name: operation.name || (operation.id as string),
-            parentOperation: operation.parent_operation || undefined,
-            requires: [...new Set(operation.requires ?? [])],
-          })),
-      })),
-  };
+  if (!Array.isArray(input.resource_types) || input.resource_types.length === 0) {
+    throw new Error("Authorization registry does not contain any resource types");
+  }
+  const resourceTypes = input.resource_types.map((resourceType) => {
+    const id = resourceType.id?.trim();
+    if (!id || !Array.isArray(resourceType.operations) || resourceType.operations.length === 0) {
+      throw new Error("Authorization registry contains an incomplete resource type");
+    }
+    const operationIds = new Set<string>();
+    const operations = resourceType.operations.map((operation) => {
+      const operationId = operation.id?.trim();
+      if (!operationId || operationIds.has(operationId)) {
+        throw new Error(`Authorization registry contains an invalid operation for ${id}`);
+      }
+      operationIds.add(operationId);
+      return {
+        id: operationId,
+        name: operation.name || operationId,
+        parentOperation: operation.parent_operation || undefined,
+        requires: [...new Set(operation.requires ?? [])],
+      };
+    });
+    if (operations.some((operation) =>
+      operation.requires.some((requirement) => !operationIds.has(requirement)),
+    )) {
+      throw new Error(`Authorization registry contains an unknown requirement for ${id}`);
+    }
+    return {
+      id,
+      name: resourceType.name || id,
+      parentType: resourceType.parent_type || undefined,
+      operations,
+    };
+  });
+  if (new Set(resourceTypes.map((resourceType) => resourceType.id)).size !== resourceTypes.length) {
+    throw new Error("Authorization registry contains duplicate resource types");
+  }
+  return { resourceTypes };
 }
 
 export function mockAuthorizationRegistry(): AuthorizationRegistry {

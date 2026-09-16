@@ -10,11 +10,12 @@ import { describe, expect, it } from "vitest";
 
 import i18n from "@/app/locales/i18n";
 import {
+  mockAuthorizationRegistry,
   normalizeAuthorizationRegistry,
 } from "@/modules/system-admin/services/authorization-registry.service";
 import { useAuthorizationRegistry } from "@/modules/system-admin/hooks/use-authorization-registry";
 
-describe("authorization catalog contract", () => {
+describe("authorization registry contract", () => {
   it("preserves explicit parent fallback and same-resource requirements", () => {
     const catalog = normalizeAuthorizationRegistry({
       resource_types: [{
@@ -22,6 +23,7 @@ describe("authorization catalog contract", () => {
         name: "Object Type",
         parent_type: "knowledge_network",
         operations: [
+          { id: "view_detail", name: "View Detail", parent_operation: "view_detail", requires: [] },
           { id: "query_data", name: "Query Data", parent_operation: "query_data", requires: [] },
           { id: "modify", name: "Modify", parent_operation: "modify", requires: ["view_detail"] },
         ],
@@ -33,6 +35,7 @@ describe("authorization catalog contract", () => {
       name: "Object Type",
       parentType: "knowledge_network",
       operations: [
+        { id: "view_detail", name: "View Detail", parentOperation: "view_detail", requires: [] },
         { id: "query_data", name: "Query Data", parentOperation: "query_data", requires: [] },
         { id: "modify", name: "Modify", parentOperation: "modify", requires: ["view_detail"] },
       ],
@@ -49,6 +52,28 @@ describe("authorization catalog contract", () => {
     });
 
     expect(catalog.resourceTypes[0]?.operations[0]?.requires).toEqual([]);
+  });
+
+  it("rejects an empty or internally incomplete registry", () => {
+    expect(() => normalizeAuthorizationRegistry({})).toThrow(/does not contain any resource types/);
+    expect(() => normalizeAuthorizationRegistry({
+      resource_types: [{
+        id: "catalog",
+        operations: [{ id: "resource_manage", requires: ["view_detail"] }],
+      }],
+    })).toThrow(/unknown requirement/);
+  });
+
+  it("keeps the function resource type in the mock registry", () => {
+    const functionType = mockAuthorizationRegistry().resourceTypes.find(
+      (resourceType) => resourceType.id === "function",
+    );
+
+    expect(functionType?.operations.map((operation) => operation.id)).toEqual(
+      expect.arrayContaining(["view", "modify", "execute"]),
+    );
+    expect(functionType?.operations.find((operation) => operation.id === "modify")?.requires)
+      .toEqual(["view"]);
   });
 
   it("updates registry labels after the interface language changes", async () => {

@@ -74,6 +74,7 @@ const RESOURCE_FALLBACK_LABELS: Record<string, string> = {
   connector_type: "Data connection",
   concept_group: "Concept group",
   data_flow: "Data flow",
+  function: "Function",
   knowledge_network: "Knowledge network",
   large_model: "Large model",
   mcp: "MCP service",
@@ -138,6 +139,7 @@ export const RESOURCE_TYPES: ResourceTypeDef[] = [
   resourceType("risk_type", STRUCTURAL_KNOWLEDGE_NETWORK_CHILD_AUTHZ),
   resourceType("small_model", ["create", "display", "modify", "delete", "execute"]),
   resourceType("large_model", ["create", "display", "modify", "delete", "execute"]),
+  resourceType("function", PUBLISHABLE),
   resourceType("operator", PUBLISHABLE),
   resourceType("tool_box", PUBLISHABLE),
   resourceType("skill", PUBLISHABLE),
@@ -183,6 +185,10 @@ export const ROLE_GRANT_RESOURCE_TYPES = RESOURCE_TYPES.filter(
   (item) => !ROLE_GRANT_EXCLUDED_RESOURCE_TYPES.has(item.type),
 );
 
+export function isRoleGrantResourceType(type: string): boolean {
+  return !ROLE_GRANT_EXCLUDED_RESOURCE_TYPES.has(type);
+}
+
 const byType = new Map(RESOURCE_TYPES.map((item) => [item.type, item]));
 
 function resourceType(type: string, operations: string[]): ResourceTypeDef {
@@ -218,7 +224,7 @@ export function requiredOperationsFor(type: string, operation: string): string[]
 }
 
 // Demo-mode fixture only. Production authoring reads the same explicit edges
-// from bkn-safe's /authz/catalog endpoint; never infer an edge from a verb.
+// from bkn-safe's /authz/registry endpoint; never infer an edge from a verb.
 const LOCAL_OPERATION_REQUIREMENTS: Record<string, string[]> = {
   "catalog:resource_manage": ["view_detail"],
   "connector_type:modify": ["view_detail"],
@@ -239,6 +245,11 @@ const LOCAL_OPERATION_REQUIREMENTS: Record<string, string[]> = {
   "metric:delete": ["view_detail"],
   "risk_type:modify": ["view_detail"],
   "risk_type:delete": ["view_detail"],
+  "function:modify": ["view"],
+  "function:delete": ["view"],
+  "function:publish": ["view"],
+  "function:unpublish": ["view"],
+  "function:authorize": ["view"],
   "tool_box:modify": ["view"],
   "tool_box:delete": ["view"],
   "tool_box:publish": ["view"],

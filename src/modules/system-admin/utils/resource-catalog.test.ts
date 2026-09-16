@@ -72,6 +72,7 @@ describe("resource-catalog", () => {
         "relation_type",
         "action_type",
         "metric",
+        "function",
       ]),
     );
   });
@@ -134,6 +135,14 @@ describe("resource-catalog", () => {
 
   it("offers action execution on a knowledge network", () => {
     expect(operationsForType("knowledge_network").map((item) => item.key)).toContain("execute");
+  });
+
+  it("keeps function permissions aligned with the registry fixture", () => {
+    expect(operationsForType("function").map((item) => item.key)).toEqual(
+      expect.arrayContaining(["view", "modify", "execute"]),
+    );
+    expect(operationsForType("function").find((item) => item.key === "modify")?.requires)
+      .toEqual(["view"]);
   });
 
   it("uses only catalog-declared authoring prerequisites", () => {
