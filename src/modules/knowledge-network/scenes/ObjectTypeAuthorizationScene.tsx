@@ -1198,7 +1198,7 @@ export function ObjectTypeAuthorizationScene() {
         open={Boolean(sourceGrant)}
         rootClassName={styles.baseSourceDrawer}
         title={sourceGrant
-          ? `${sourceGrantee?.name || sourceGrant.accessorId} / ${t("systemAdmin.objectGrants.grantSource")}`
+          ? `${sourceGrantee || sourceGrant.accessorId} / ${t("systemAdmin.objectGrants.grantSource")}`
           : t("systemAdmin.objectGrants.grantSource")}
         width="min(760px, 100vw)"
       >
