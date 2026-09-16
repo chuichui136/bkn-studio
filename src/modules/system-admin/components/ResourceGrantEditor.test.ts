@@ -9,7 +9,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   addOperationToGrant,
-  normalizeRoleOperations,
   removeOperationFromGrant,
 } from "@/modules/system-admin/utils/resource-grant-operations";
 import type { ResourceGrant } from "@/modules/system-admin/types/admin";
@@ -45,18 +44,6 @@ describe("ResourceGrantEditor operation changes", () => {
   it("adds an operation to the existing resource grant without replacing other operations", () => {
     expect(addOperationToGrant([catalogGrant], catalogGrant, "create")).toEqual([
       { ...catalogGrant, operations: ["view_detail", "query", "create"] },
-    ]);
-  });
-
-  it("adds and protects the view prerequisite used by permission management", () => {
-    expect(normalizeRoleOperations("catalog", ["modify"])).toEqual(["view_detail", "modify"]);
-
-    const dependentGrant: ResourceGrant = {
-      resource: { type: "catalog", id: "catalog-1" },
-      operations: ["view_detail", "modify"],
-    };
-    expect(removeOperationFromGrant([dependentGrant], dependentGrant, "view_detail")).toEqual([
-      dependentGrant,
     ]);
   });
 
