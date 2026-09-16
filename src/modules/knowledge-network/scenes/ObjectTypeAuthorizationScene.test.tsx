@@ -582,7 +582,7 @@ describe("ObjectTypeAuthorizationScene", () => {
     expect(mocks.upsertObjectGrantForObject).not.toHaveBeenCalled();
   });
 
-  it("allows a built-in administrator's ordinary object permission to be changed", async () => {
+  it("allows a built-in administrator's own ordinary object permission to be changed", async () => {
     mocks.appServices.runtimeConfig.currentUser.permissions = ["admin-authz:grant", "admin-authz:revoke"];
     mocks.getDetail.mockResolvedValue({
       color: "#356af6",
@@ -623,6 +623,7 @@ describe("ObjectTypeAuthorizationScene", () => {
             accessorId: "user-1",
             active: true,
             authoritySource: "admin_authz",
+            createdBy: "u-owner",
             effect: "allow",
             grantId: "grant-view",
             inherited: false,
@@ -633,6 +634,7 @@ describe("ObjectTypeAuthorizationScene", () => {
             accessorId: "user-1",
             active: true,
             authoritySource: "admin_authz",
+            createdBy: "u-owner",
             effect: "allow",
             grantId: "grant-modify",
             inherited: false,
@@ -643,6 +645,7 @@ describe("ObjectTypeAuthorizationScene", () => {
             accessorId: "user-1",
             active: true,
             authoritySource: "admin_authz",
+            createdBy: "u-owner",
             effect: "allow",
             grantId: "grant-view-duplicate",
             inherited: false,
