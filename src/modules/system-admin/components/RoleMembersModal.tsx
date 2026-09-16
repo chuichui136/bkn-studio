@@ -88,7 +88,6 @@ export function RoleMembersModal({
     if (!missing.length) {
       return;
     }
-    missing.forEach((id) => loadedUserLabelIds.current.add(id));
     const requestSeq = ++userLabelRequestSeq.current;
     const controller = new AbortController();
     void hydrateUserLookupDetails(missing, { signal: controller.signal }).then(() => {
@@ -98,6 +97,9 @@ export function RoleMembersModal({
       if (requestSeq !== userLabelRequestSeq.current) {
         return;
       }
+      // Mark a member as handled only after the active subscription finishes.
+      // A cancelled batch must stay eligible for the next member-list refresh.
+      missing.forEach((id) => loadedUserLabelIds.current.add(id));
       setUserLabels((current) => {
         const next = { ...current };
         for (const id of missing) {
