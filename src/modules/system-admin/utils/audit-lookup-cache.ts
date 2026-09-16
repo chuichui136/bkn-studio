@@ -10,6 +10,7 @@ import {
   listDepartments,
   listRoles,
 } from "@/modules/system-admin/services/admin.service";
+import { isRequestNotFound } from "@/framework/request/error-message";
 import type { AdminDepartment, AdminRole, AdminUser } from "@/modules/system-admin/types/admin";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -22,6 +23,12 @@ type CacheEntry<T> = {
 let departmentsCache: CacheEntry<AdminDepartment[]> | null = null;
 let rolesCache: CacheEntry<AdminRole[]> | null = null;
 const userCache = new Map<string, CacheEntry<AdminUser>>();
+const deletedUserCache = new Map<string, number>();
+
+export type UserLookupDetails = {
+  deleted: string[];
+  unavailable: string[];
+};
 
 /** An audit actor is not always a user; for example, the license service uses system:license. */
 export function isUserLookupId(id: string) {
@@ -36,6 +43,7 @@ export function primeUserLookupCache(users: AdminUser[]) {
   const now = Date.now();
   for (const user of users) {
     userCache.set(user.id, { data: user, loadedAt: now });
+    deletedUserCache.delete(user.id);
   }
 }
 
@@ -67,29 +75,69 @@ export async function getCachedUser(id: string): Promise<AdminUser | null> {
   if (isFresh(cached)) {
     return cached!.data;
   }
+  if (isDeletedUserSync(id)) {
+    return null;
+  }
   try {
-    const user = await getUser(id);
+    const user = await getUser(id, { skipErrorToast: true });
     userCache.set(id, { data: user, loadedAt: Date.now() });
+    deletedUserCache.delete(id);
     return user;
-  } catch {
+  } catch (error) {
+    if (isRequestNotFound(error)) {
+      deletedUserCache.set(id, Date.now());
+    }
     return null;
   }
 }
 
 export async function hydrateUserLookup(ids: string[]): Promise<string[]> {
+  const result = await hydrateUserLookupDetails(ids);
+  return [...result.deleted, ...result.unavailable];
+}
+
+export async function hydrateUserLookupDetails(ids: string[]): Promise<UserLookupDetails> {
   const missing = [...new Set(ids)].filter(
-    (id) => isUserLookupId(id) && !isFresh(userCache.get(id)),
+    (id) => isUserLookupId(id) && !isFresh(userCache.get(id)) && !isDeletedUserSync(id),
   );
   if (!missing.length) {
-    return [];
+    return { deleted: [], unavailable: [] };
   }
-  const users = await Promise.all(missing.map((id) => getCachedUser(id)));
-  return missing.filter((_id, index) => users[index] === null);
+  const results = await Promise.all(missing.map(async (id) => {
+    try {
+      const user = await getUser(id, { skipErrorToast: true });
+      userCache.set(id, { data: user, loadedAt: Date.now() });
+      deletedUserCache.delete(id);
+      return "resolved" as const;
+    } catch (error) {
+      if (isRequestNotFound(error)) {
+        deletedUserCache.set(id, Date.now());
+        return "deleted" as const;
+      }
+      return "unavailable" as const;
+    }
+  }));
+  return {
+    deleted: missing.filter((_id, index) => results[index] === "deleted"),
+    unavailable: missing.filter((_id, index) => results[index] === "unavailable"),
+  };
 }
 
 export function getCachedUserSync(id: string): AdminUser | undefined {
   const cached = userCache.get(id);
   return isFresh(cached) ? cached!.data : undefined;
+}
+
+export function isDeletedUserSync(id: string): boolean {
+  const loadedAt = deletedUserCache.get(id);
+  if (loadedAt === undefined) {
+    return false;
+  }
+  if (Date.now() - loadedAt < CACHE_TTL_MS) {
+    return true;
+  }
+  deletedUserCache.delete(id);
+  return false;
 }
 
 export function listCachedUsers(): AdminUser[] {

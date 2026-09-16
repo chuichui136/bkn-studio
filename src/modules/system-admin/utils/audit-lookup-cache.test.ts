@@ -18,6 +18,8 @@ vi.mock("@/modules/system-admin/services/admin.service", () => ({
 import {
   getCachedUser,
   hydrateUserLookup,
+  hydrateUserLookupDetails,
+  isDeletedUserSync,
   isUserLookupId,
 } from "@/modules/system-admin/utils/audit-lookup-cache";
 
@@ -33,6 +35,23 @@ describe("audit user lookup", () => {
     await hydrateUserLookup(["system:license", "u-1"]);
 
     expect(getUser).toHaveBeenCalledTimes(1);
-    expect(getUser).toHaveBeenCalledWith("u-1");
+    expect(getUser).toHaveBeenCalledWith("u-1", { skipErrorToast: true });
+  });
+
+  it("distinguishes deleted users from temporary lookup failures", async () => {
+    getUser.mockImplementation((id: string) => {
+      if (id === "u-deleted") {
+        return Promise.reject({ isAxiosError: true, response: { status: 404 } });
+      }
+      return Promise.reject({ isAxiosError: true, response: { status: 503 } });
+    });
+
+    await expect(hydrateUserLookupDetails(["u-deleted", "u-unavailable"]))
+      .resolves.toEqual({
+        deleted: ["u-deleted"],
+        unavailable: ["u-unavailable"],
+      });
+    expect(isDeletedUserSync("u-deleted")).toBe(true);
+    expect(isDeletedUserSync("u-unavailable")).toBe(false);
   });
 });

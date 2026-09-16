@@ -47,6 +47,9 @@ import {
   getCachedDepartments,
   getCachedUserSync,
   hydrateUserLookup,
+  hydrateUserLookupDetails,
+  isDeletedUserSync,
+  isUserLookupId,
   primeUserLookupCache,
 } from "@/modules/system-admin/utils/audit-lookup-cache";
 import {
@@ -55,6 +58,7 @@ import {
 } from "@/modules/system-admin/utils/authz-catalog";
 import {
   canManageGrantSource,
+  grantCreatorUserId,
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
 } from "@/modules/system-admin/utils/object-grant-guards";
@@ -207,17 +211,22 @@ export function ObjectAuthorizeDrawer({
   // lookups only enrich older responses that lack a display name; one failed lookup must never
   // prevent the other from completing.
   const syncLookup = useCallback(async (accessorIds: string[]) => {
-    const ids = [...new Set(accessorIds.filter(Boolean))];
+    const ids = [...new Set(accessorIds.filter(isUserLookupId))];
     setPendingLookupIds((current) => new Set([...current, ...ids]));
     const [departmentsResult, usersResult] = await Promise.allSettled([
       getCachedDepartments({ skipErrorToast: true }),
-      hydrateUserLookup(ids),
+      hydrateUserLookupDetails(ids),
     ]);
     if (departmentsResult.status === "fulfilled") {
       setDepartments(departmentsResult.value);
     }
-    const unresolved = usersResult.status === "fulfilled" ? usersResult.value : ids;
-    setUnresolvedLookupIds((current) => new Set([...current, ...unresolved]));
+    const unresolved = usersResult.status === "fulfilled" ? usersResult.value.unavailable : ids;
+    setUnresolvedLookupIds((current) => {
+      const next = new Set(current);
+      ids.forEach((id) => next.delete(id));
+      unresolved.forEach((id) => next.add(id));
+      return next;
+    });
     setPendingLookupIds((current) => {
       const next = new Set(current);
       ids.forEach((id) => next.delete(id));
@@ -234,7 +243,10 @@ export function ObjectAuthorizeDrawer({
       primeUserLookupCache(accounts);
       setGrants(grantList);
       setUnresolvedLookupIds(new Set());
-      await syncLookup(grantList.map((grant) => grant.accessorId));
+      await syncLookup(grantList.flatMap((grant) => [
+        grant.accessorId,
+        ...(grant.grants ?? []).flatMap((source) => grantCreatorUserId(source) ?? []),
+      ]));
       if (enterpriseAvailable) {
         setEnterpriseGrants(await listEnterpriseObjectGrants({ resourceId: objId, resourceType: objType }));
       } else {
@@ -283,17 +295,50 @@ export function ObjectAuthorizeDrawer({
         return { id, name: dept.name, sub: undefined, type: "department" as const };
       }
       if (pendingLookupIds.has(id)) {
-        return { id, loading: true, name: t("systemAdmin.objectGrants.granteeLoading"), sub: id, type: "user" as const };
+        return { id, loading: true, name: t("systemAdmin.objectGrants.granteeLoading"), type: "user" as const };
+      }
+      if (isDeletedUserSync(id)) {
+        return {
+          deleted: true,
+          id,
+          name: t("systemAdmin.objectGrants.deletedUser"),
+          type: "user" as const,
+        };
       }
       return {
         id,
         name: t("systemAdmin.objectGrants.granteeUnresolved"),
-        sub: id,
         type: "user" as const,
         unresolved: unresolvedLookupIds.has(id),
       };
     },
     [deptMap, lookupRevision, pendingLookupIds, t, unresolvedLookupIds],
+  );
+
+  const resolveGrantCreator = useCallback(
+    (source: GrantRecord) => {
+      void lookupRevision;
+      const id = grantCreatorUserId(source);
+      if (!id) {
+        return {
+          name: source.createdBy
+            ? t(`systemAdmin.objectGrants.authority.${source.authoritySource}`)
+            : t("systemAdmin.objectGrants.creatorNotRecorded"),
+        };
+      }
+      const user = getCachedUserSync(id);
+      if (user) {
+        return { name: user.name, sub: user.account };
+      }
+      if (pendingLookupIds.has(id)) {
+        return { name: t("systemAdmin.objectGrants.granteeLoading") };
+      }
+      if (isDeletedUserSync(id)) {
+        return { name: t("systemAdmin.objectGrants.deletedUser") };
+      }
+      return { name: t("systemAdmin.objectGrants.granteeUnresolved") };
+    },
+    [lookupRevision, pendingLookupIds, t],
   );
 
   const grantProtection = useCallback(
@@ -482,7 +527,6 @@ export function ObjectAuthorizeDrawer({
       render: (_accessorId: string, grant: ObjectGrant) => {
         const grantee = resolveGrantee(grant);
         const protection = grantProtection(grant);
-        const granteeIsLoading = "loading" in grantee && grantee.loading;
         const granteeIsUnresolved = "unresolved" in grantee && grantee.unresolved;
         return (
           <div className={styles.authzSubjectCell}>
@@ -490,10 +534,8 @@ export function ObjectAuthorizeDrawer({
               {grantee.type === "department" ? <AppstoreOutlined /> : <UserOutlined />}
             </span>
             <span>
-              <Tooltip title={granteeIsUnresolved || granteeIsLoading ? grantee.id : undefined}>
-                <strong>{grantee.name}</strong>
-              </Tooltip>
-              <small>{grantee.sub}</small>
+              <strong>{grantee.name}</strong>
+              {grantee.sub ? <small>{grantee.sub}</small> : null}
             </span>
             {granteeIsUnresolved ? (
               <AppButton
@@ -694,6 +736,21 @@ export function ObjectAuthorizeDrawer({
       width: 132,
     },
     {
+      dataIndex: "createdBy",
+      key: "createdBy",
+      render: (_createdBy: string | undefined, source) => {
+        const creator = resolveGrantCreator(source);
+        return (
+          <span className={styles.authzSourceOperationCell}>
+            <strong>{creator.name}</strong>
+            {creator.sub ? <small>{creator.sub}</small> : null}
+          </span>
+        );
+      },
+      title: t("systemAdmin.objectGrants.actualGrantor"),
+      width: 148,
+    },
+    {
       dataIndex: "grantId",
       ellipsis: true,
       key: "grantId",
@@ -787,7 +844,7 @@ export function ObjectAuthorizeDrawer({
         locale={{ emptyText: t("systemAdmin.objectGrants.sourceEmpty") }}
         pagination={false}
         rowKey="grantId"
-        scroll={{ x: 820 }}
+        scroll={{ x: 968 }}
         size="small"
         tableLayout="fixed"
       />

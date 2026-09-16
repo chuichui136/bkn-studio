@@ -83,9 +83,17 @@ import {
 } from "@/modules/system-admin/services/authz.service";
 import type { AdminRole, AdminUser } from "@/modules/system-admin/types/admin";
 import type { GrantRecord, ObjectGrant } from "@/modules/system-admin/types/authz";
+import {
+  getCachedUserSync,
+  hydrateUserLookupDetails,
+  isDeletedUserSync,
+  isUserLookupId,
+  primeUserLookupCache,
+} from "@/modules/system-admin/utils/audit-lookup-cache";
 import { HIDDEN_INSTANCE_OPS } from "@/modules/system-admin/utils/authz-catalog";
 import {
   canManageGrantSource,
+  grantCreatorUserId,
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
 } from "@/modules/system-admin/utils/object-grant-guards";
@@ -163,6 +171,8 @@ export function ObjectTypeAuthorizationScene() {
   const [baseBusy, setBaseBusy] = useState(false);
   const [objectGrants, setObjectGrants] = useState<ObjectGrant[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(() => new Set());
+  const [userLookupRevision, setUserLookupRevision] = useState(0);
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [candidateUserId, setCandidateUserId] = useState<string>();
   const [candidateOperations, setCandidateOperations] = useState<string[]>([]);
@@ -180,6 +190,23 @@ export function ObjectTypeAuthorizationScene() {
   const [draft, setDraft] = useState<Map<string, PropertyAccessSelection>>(new Map());
   const [editingMaskProperty, setEditingMaskProperty] = useState<ObjectTypeDataProperty>();
 
+  const syncUserLookup = useCallback(async (rawIds: string[]) => {
+    const ids = [...new Set(rawIds.filter(isUserLookupId))];
+    setPendingUserIds((current) => new Set([...current, ...ids]));
+    try {
+      await hydrateUserLookupDetails(ids);
+    } catch {
+      // The source rows remain readable with an unavailable-user fallback.
+    } finally {
+      setPendingUserIds((current) => {
+        const next = new Set(current);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      setUserLookupRevision((revision) => revision + 1);
+    }
+  }, []);
+
   const loadBase = useCallback(async () => {
     setBaseLoading(true);
     try {
@@ -188,15 +215,21 @@ export function ObjectTypeAuthorizationScene() {
         listUsersPage({ limit: 500 }, { skipErrorToast: true }).catch(() => null),
         listRoles({ withMembers: true }).catch(() => null),
       ]);
+      const directoryUsers = mergeUsers(userResult?.users ?? [], grantResult.accounts);
+      primeUserLookupCache(directoryUsers);
       setObjectGrants(grantResult.grants);
-      setUsers(mergeUsers(userResult?.users ?? [], grantResult.accounts));
+      setUsers(directoryUsers);
       setRoles(roleResult ?? []);
+      await syncUserLookup(grantResult.grants.flatMap((grant) => [
+        grant.accessorId,
+        ...(grant.grants ?? []).flatMap((source) => grantCreatorUserId(source) ?? []),
+      ]));
     } catch (error) {
       void message.error(extractRequestErrorMessage(error));
     } finally {
       setBaseLoading(false);
     }
-  }, [message, objectTypeRef]);
+  }, [message, objectTypeRef, syncUserLookup]);
 
   useEffect(() => {
     let cancelled = false;
@@ -293,6 +326,10 @@ export function ObjectTypeAuthorizationScene() {
   );
 
   const userMap = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
+  const directoryUser = useCallback((id: string) => {
+    void userLookupRevision;
+    return userMap.get(id) ?? getCachedUserSync(id);
+  }, [userLookupRevision, userMap]);
   const roleMap = useMemo(() => new Map(roles.map((role) => [role.id, role])), [roles]);
   const currentSubjectRecord = subjectType === "user" ? userMap.get(subjectId ?? "") : roleMap.get(subjectId ?? "");
 
@@ -757,7 +794,7 @@ export function ObjectTypeAuthorizationScene() {
     if (!sources.length) {
       return;
     }
-    const grantee = grantGranteeLabel(grant, userMap.get(grant.accessorId));
+    const grantee = grantGranteeLabel(grant, directoryUser(grant.accessorId));
     void modal.confirm({
       cancelText: t("common.cancel"),
       content: t("systemAdmin.objectGrants.deleteGrantConfirm", {
@@ -785,11 +822,33 @@ export function ObjectTypeAuthorizationScene() {
 
   const sourceGrant = objectGrants.find((grant) => grant.accessorId === sourceAccessorId);
   const sourceGrantee = sourceGrant
-    ? grantGranteeLabel(sourceGrant, userMap.get(sourceGrant.accessorId))
+    ? grantGranteeLabel(sourceGrant, directoryUser(sourceGrant.accessorId))
     : undefined;
   const sourceRows = collapseGrantSources(
     (sourceGrant?.grants ?? []).filter((source) => source.active),
   );
+
+  const resolveGrantCreator = (source: GrantRecord) => {
+    const id = grantCreatorUserId(source);
+    if (!id) {
+      return {
+        name: source.createdBy
+          ? t(`systemAdmin.objectGrants.authority.${source.authoritySource}`)
+          : t("systemAdmin.objectGrants.creatorNotRecorded"),
+      };
+    }
+    const user = directoryUser(id);
+    if (user) {
+      return { name: user.name, sub: user.account };
+    }
+    if (pendingUserIds.has(id)) {
+      return { name: t("systemAdmin.objectGrants.granteeLoading") };
+    }
+    if (isDeletedUserSync(id)) {
+      return { name: t("systemAdmin.objectGrants.deletedUser") };
+    }
+    return { name: t("systemAdmin.objectGrants.granteeUnresolved") };
+  };
 
   const allowedOperationsForGrant = (grant: ObjectGrant) => new Set(
     grant.effectiveDecisions?.length
@@ -886,6 +945,21 @@ export function ObjectTypeAuthorizationScene() {
       width: 128,
     },
     {
+      dataIndex: "createdBy",
+      key: "createdBy",
+      render: (_createdBy: string | undefined, source) => {
+        const creator = resolveGrantCreator(source);
+        return (
+          <span className={styles.sourceOperationCell}>
+            <strong>{creator.name}</strong>
+            {creator.sub ? <small>{creator.sub}</small> : null}
+          </span>
+        );
+      },
+      title: t("systemAdmin.objectGrants.actualGrantor"),
+      width: 140,
+    },
+    {
       dataIndex: "grantId",
       ellipsis: true,
       key: "grantId",
@@ -965,15 +1039,19 @@ export function ObjectTypeAuthorizationScene() {
     {
       dataIndex: "accessorId",
       render: (id: string, grant: ObjectGrant) => {
-        const grantee = grantGranteeLabel(grant, userMap.get(id));
-        const account = grant.accessorAccount || userMap.get(id)?.account;
+        const user = directoryUser(id);
+        const grantee = grantGranteeLabel(grant, user);
+        const account = grant.accessorAccount || user?.account;
+        const displayName = grantee || (pendingUserIds.has(id)
+          ? t("systemAdmin.objectGrants.granteeLoading")
+          : isDeletedUserSync(id)
+            ? t("systemAdmin.objectGrants.deletedUser")
+            : t("systemAdmin.objectGrants.granteeUnresolved"));
         return (
           <div className={styles.subjectName}>
             <Avatar icon={<UserOutlined />} size={34} />
             <span>
-              <Tooltip title={grantee ? undefined : id}>
-                <strong>{grantee || t("systemAdmin.objectGrants.granteeUnresolved")}</strong>
-              </Tooltip>
+              <strong>{displayName}</strong>
               {account ? <small>{account}</small> : null}
             </span>
           </div>
@@ -1268,7 +1346,7 @@ export function ObjectTypeAuthorizationScene() {
           locale={{ emptyText: t("systemAdmin.objectGrants.sourceEmpty") }}
           pagination={false}
           rowKey={(source) => source.grantIds.join("|")}
-          scroll={{ x: 680 }}
+          scroll={{ x: 820 }}
           size="small"
           tableLayout="fixed"
         />

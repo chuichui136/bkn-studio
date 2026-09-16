@@ -13,6 +13,8 @@ import type { GrantRecord, ObjectGrant } from "@/modules/system-admin/types/auth
 
 const mocks = vi.hoisted(() => ({
   getCachedUserSync: vi.fn(),
+  hydrateUserLookupDetails: vi.fn(),
+  isDeletedUserSync: vi.fn(),
   listObjectGrantsForObject: vi.fn(),
   listUsersPage: vi.fn(),
   revokeObjectGrantForObject: vi.fn(),
@@ -59,6 +61,9 @@ vi.mock("@/modules/system-admin/utils/audit-lookup-cache", () => ({
   getCachedDepartments: vi.fn(() => Promise.resolve([])),
   getCachedUserSync: mocks.getCachedUserSync,
   hydrateUserLookup: vi.fn(() => Promise.resolve([])),
+  hydrateUserLookupDetails: mocks.hydrateUserLookupDetails,
+  isDeletedUserSync: mocks.isDeletedUserSync,
+  isUserLookupId: (id: string) => Boolean(id) && !id.startsWith("system:"),
   primeUserLookupCache: vi.fn(),
 }));
 
@@ -113,7 +118,18 @@ describe("ObjectAuthorizeDrawer source records", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.useCapability.mockReturnValue("available");
-    mocks.getCachedUserSync.mockReturnValue(undefined);
+    mocks.getCachedUserSync.mockImplementation((id: string) => ({
+      account: "",
+      accountType: "local",
+      email: "",
+      enabled: true,
+      id,
+      name: id,
+      roleIds: [],
+      telephone: "",
+    }));
+    mocks.hydrateUserLookupDetails.mockResolvedValue({ deleted: [], unavailable: [] });
+    mocks.isDeletedUserSync.mockReturnValue(false);
     appServices.runtimeConfig.currentUser.id = "u-admin";
     appServices.runtimeConfig.currentUser.permissions = [
       "admin-authz:grant",
@@ -172,6 +188,52 @@ describe("ObjectAuthorizeDrawer source records", () => {
     expect(screen.getByText("普通用户 B")).not.toBeNull();
     expect(screen.getByText("b")).not.toBeNull();
     expect(screen.queryByText("u-mate")).toBeNull();
+  });
+
+  it("shows the actual grantor name for each independent source", async () => {
+    mocks.getCachedUserSync.mockImplementation((id: string) => id === "u-grantor"
+      ? {
+          account: "grantor.account",
+          accountType: "local",
+          email: "",
+          enabled: true,
+          id,
+          name: "Grantor B",
+          roleIds: [],
+          telephone: "",
+        }
+      : undefined);
+    mocks.listObjectGrantsForObject.mockResolvedValue({
+      accounts: [],
+      grants: [grant([source({ createdBy: "u-grantor" })], {
+        accessorName: "Grantee C",
+      })],
+    });
+
+    render(<ObjectAuthorizeDrawer objId="catalog-1" objName="Customer catalog" objType="catalog" onClose={vi.fn()} open />);
+    await act(async () => {});
+    fireEvent.click(screen.getByText("common.viewDetails"));
+
+    expect(screen.getAllByText("systemAdmin.objectGrants.actualGrantor")).not.toHaveLength(0);
+    expect(screen.getByText("Grantor B")).not.toBeNull();
+    expect(screen.getByText("grantor.account")).not.toBeNull();
+  });
+
+  it("labels a deleted grantee without exposing its internal ID or retrying a 404", async () => {
+    mocks.getCachedUserSync.mockReturnValue(undefined);
+    mocks.isDeletedUserSync.mockImplementation((id: string) => id === "u-mate");
+    mocks.hydrateUserLookupDetails.mockResolvedValue({ deleted: ["u-mate"], unavailable: [] });
+    mocks.listObjectGrantsForObject.mockResolvedValue({
+      accounts: [],
+      grants: [grant([source({})])],
+    });
+
+    render(<ObjectAuthorizeDrawer objId="catalog-1" objName="Customer catalog" objType="catalog" onClose={vi.fn()} open />);
+    await act(async () => {});
+
+    expect(screen.getByText("systemAdmin.objectGrants.deletedUser")).not.toBeNull();
+    expect(screen.queryByText("u-mate")).toBeNull();
+    expect(screen.queryByText("systemAdmin.objectGrants.retryGranteeLookup")).toBeNull();
   });
 
   it("revokes one direct source by stable grant_id", async () => {

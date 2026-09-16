@@ -613,7 +613,14 @@ describe("ObjectTypeAuthorizationScene", () => {
       roleIds: [],
       telephone: "",
     };
-    mocks.listUsersPage.mockResolvedValue({ users: [alice] });
+    const owner = {
+      ...alice,
+      account: "owner.b",
+      builtin: false,
+      id: "u-owner",
+      name: "Owner B",
+    };
+    mocks.listUsersPage.mockResolvedValue({ users: [alice, owner] });
     mocks.listObjectGrantsForObject.mockResolvedValue({
       accounts: [alice],
       grants: [{
@@ -682,6 +689,10 @@ describe("ObjectTypeAuthorizationScene", () => {
     expect(within(sourceDrawer).getByText("grant-view")).not.toBeNull();
     expect(within(sourceDrawer).getByText("grant-modify")).not.toBeNull();
     expect(within(sourceDrawer).getAllByText("view_detail")).toHaveLength(1);
+    expect(within(sourceDrawer).getAllByText("systemAdmin.objectGrants.actualGrantor"))
+      .not.toHaveLength(0);
+    expect(within(sourceDrawer).getAllByText("Owner B")).not.toHaveLength(0);
+    expect(within(sourceDrawer).getAllByText("owner.b")).not.toHaveLength(0);
     expect(within(sourceDrawer).getByText("systemAdmin.objectGrants.collapsedSourceCount"))
       .not.toBeNull();
     fireEvent.click(within(sourceDrawer).getByRole("button", { name: "Close" }));

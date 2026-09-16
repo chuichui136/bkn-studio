@@ -11,6 +11,24 @@ import type { GrantRecord, ObjectGrant } from "@/modules/system-admin/types/auth
 export const PUBLIC_ACCESSOR_ID = "00000000-0000-0000-0000-000000000000";
 
 /**
+ * New records carry the authenticated user's ID in `createdBy`. Historical
+ * records sometimes stored the authority kind there instead; synthetic system
+ * actors are also not directory users. Only concrete user IDs should trigger a
+ * user lookup.
+ */
+export function grantCreatorUserId(source: GrantRecord): string | undefined {
+  const createdBy = source.createdBy?.trim();
+  if (
+    !createdBy ||
+    createdBy === source.authoritySource ||
+    createdBy.startsWith("system:")
+  ) {
+    return undefined;
+  }
+  return createdBy;
+}
+
+/**
  * Whether bkn-safe will refuse a non-administrator write against this target
  * regardless of source ownership.
  *

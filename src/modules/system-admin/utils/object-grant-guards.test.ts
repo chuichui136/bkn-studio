@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import type { GrantRecord, ObjectGrant } from "@/modules/system-admin/types/authz";
 import {
   canManageGrantSource,
+  grantCreatorUserId,
   PUBLIC_ACCESSOR_ID,
   isDelegateProtectedGrant,
   isSelfAuthorizeLockout,
@@ -118,5 +119,14 @@ describe("canManageGrantSource", () => {
 
   it("allows a platform authorization administrator to manage every source", () => {
     expect(canManageGrantSource({ currentUserId: "u-admin", isPlatformAuthzAdmin: true, source: source("u-a") })).toBe(true);
+  });
+});
+
+describe("grantCreatorUserId", () => {
+  it("returns only concrete user IDs", () => {
+    expect(grantCreatorUserId(source("u-b"))).toBe("u-b");
+    expect(grantCreatorUserId(source("owner_delegate"))).toBeUndefined();
+    expect(grantCreatorUserId(source("system:migration"))).toBeUndefined();
+    expect(grantCreatorUserId(source())).toBeUndefined();
   });
 });
