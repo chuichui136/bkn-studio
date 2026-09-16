@@ -16,12 +16,13 @@ import { AppButton } from "@/framework/ui/common/AppButton";
 import { AppTable } from "@/framework/ui/common/AppTable";
 import { EmptyStatePanel } from "@/framework/ui/common/EmptyStatePanel";
 import { TablePaginationBar } from "@/framework/ui/common/TablePaginationBar";
-import {
-  getUser,
-  setRoleMember,
-} from "@/modules/system-admin/services/admin.service";
+import { setRoleMember } from "@/modules/system-admin/services/admin.service";
 import type { AdminDepartment, AdminRole, RoleMember } from "@/modules/system-admin/types/admin";
 import { deptPath } from "@/modules/system-admin/utils/admin-helpers";
+import {
+  getCachedUserSync,
+  hydrateUserLookupDetails,
+} from "@/modules/system-admin/utils/audit-lookup-cache";
 
 import { DirectoryUserPicker } from "./DirectoryUserPicker";
 import modalStyles from "@/modules/system-admin/components/RoleMembersModal.module.css";
@@ -40,20 +41,6 @@ type RoleMembersModalProps = {
 type ResolvedRoleMember = RoleMember & {
   userLookup?: "loading" | "unresolved";
 };
-
-type UserLabelLookupResult = {
-  id: string;
-  label?: string;
-};
-
-async function lookupUserLabel(id: string): Promise<UserLabelLookupResult> {
-  try {
-    const user = await getUser(id);
-    return { id, label: `${user.name}（${user.account}）` };
-  } catch {
-    return { id };
-  }
-}
 
 export function RoleMembersModal({
   departments,
@@ -103,26 +90,27 @@ export function RoleMembersModal({
     }
     missing.forEach((id) => loadedUserLabelIds.current.add(id));
     const requestSeq = ++userLabelRequestSeq.current;
-    void Promise.all(missing.map(lookupUserLabel)).then((results) => {
+    void hydrateUserLookupDetails(missing).then(() => {
       if (requestSeq !== userLabelRequestSeq.current) {
         return;
       }
       setUserLabels((current) => {
         const next = { ...current };
-        for (const item of results) {
-          if (item.label) {
-            next[item.id] = item.label;
+        for (const id of missing) {
+          const user = getCachedUserSync(id);
+          if (user) {
+            next[id] = `${user.name}（${user.account}）`;
           }
         }
         return next;
       });
       setUnresolvedUserLabelIds((current) => {
         const next = new Set(current);
-        for (const item of results) {
-          if (item.label) {
-            next.delete(item.id);
+        for (const id of missing) {
+          if (getCachedUserSync(id)) {
+            next.delete(id);
           } else {
-            next.add(item.id);
+            next.add(id);
           }
         }
         return next;

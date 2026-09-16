@@ -555,7 +555,7 @@ describe("ObjectAuthorizeDrawer source records", () => {
     await act(async () => {});
 
     expect(rowDeleteButton("u-owner").disabled).toBe(false);
-    expect(rowDeleteButton(publicAccessorId).disabled).toBe(true);
+    expect(rowDeleteButton("systemAdmin.objectGrants.publicSubject").disabled).toBe(true);
     expect(rowDeleteButton("u-mate").disabled).toBe(false);
     expect(rowDeleteButton("u-other").disabled).toBe(true);
   });

@@ -14,6 +14,9 @@ import { isRequestNotFound } from "@/framework/request/error-message";
 import type { AdminDepartment, AdminRole, AdminUser } from "@/modules/system-admin/types/admin";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
+// A source list can contain hundreds of distinct grantors. Keep directory
+// enrichment responsive without allowing one page to flood the user API.
+export const MAX_CONCURRENT_USER_LOOKUPS = 8;
 
 type CacheEntry<T> = {
   data: T;
@@ -24,11 +27,16 @@ let departmentsCache: CacheEntry<AdminDepartment[]> | null = null;
 let rolesCache: CacheEntry<AdminRole[]> | null = null;
 const userCache = new Map<string, CacheEntry<AdminUser>>();
 const deletedUserCache = new Map<string, number>();
+const inFlightUserLookups = new Map<string, Promise<UserLookupResult>>();
+const queuedUserLookups: Array<() => void> = [];
+let activeUserLookups = 0;
 
 export type UserLookupDetails = {
   deleted: string[];
   unavailable: string[];
 };
+
+type UserLookupResult = "resolved" | "deleted" | "unavailable";
 
 /** An audit actor is not always a user; for example, the license service uses system:license. */
 export function isUserLookupId(id: string) {
@@ -78,17 +86,8 @@ export async function getCachedUser(id: string): Promise<AdminUser | null> {
   if (isDeletedUserSync(id)) {
     return null;
   }
-  try {
-    const user = await getUser(id, { skipErrorToast: true });
-    userCache.set(id, { data: user, loadedAt: Date.now() });
-    deletedUserCache.delete(id);
-    return user;
-  } catch (error) {
-    if (isRequestNotFound(error)) {
-      deletedUserCache.set(id, Date.now());
-    }
-    return null;
-  }
+  const result = await lookupUser(id);
+  return result === "resolved" ? getCachedUserSync(id) ?? null : null;
 }
 
 export async function hydrateUserLookup(ids: string[]): Promise<string[]> {
@@ -103,24 +102,57 @@ export async function hydrateUserLookupDetails(ids: string[]): Promise<UserLooku
   if (!missing.length) {
     return { deleted: [], unavailable: [] };
   }
-  const results = await Promise.all(missing.map(async (id) => {
-    try {
-      const user = await getUser(id, { skipErrorToast: true });
-      userCache.set(id, { data: user, loadedAt: Date.now() });
-      deletedUserCache.delete(id);
-      return "resolved" as const;
-    } catch (error) {
-      if (isRequestNotFound(error)) {
-        deletedUserCache.set(id, Date.now());
-        return "deleted" as const;
-      }
-      return "unavailable" as const;
-    }
-  }));
+  const results = await Promise.all(missing.map((id) => lookupUser(id)));
   return {
     deleted: missing.filter((_id, index) => results[index] === "deleted"),
     unavailable: missing.filter((_id, index) => results[index] === "unavailable"),
   };
+}
+
+function lookupUser(id: string): Promise<UserLookupResult> {
+  const existing = inFlightUserLookups.get(id);
+  if (existing) {
+    return existing;
+  }
+
+  let resolveLookup: (result: UserLookupResult) => void;
+  const lookup = new Promise<UserLookupResult>((resolve) => {
+    resolveLookup = resolve;
+  });
+  inFlightUserLookups.set(id, lookup);
+  scheduleUserLookup(async () => {
+    let result: UserLookupResult = "unavailable";
+    try {
+      const user = await getUser(id, { skipErrorToast: true });
+      userCache.set(id, { data: user, loadedAt: Date.now() });
+      deletedUserCache.delete(id);
+      result = "resolved";
+    } catch (error) {
+      if (isRequestNotFound(error)) {
+        deletedUserCache.set(id, Date.now());
+        result = "deleted";
+      }
+    } finally {
+      inFlightUserLookups.delete(id);
+      resolveLookup!(result);
+    }
+  });
+  return lookup;
+}
+
+function scheduleUserLookup(task: () => Promise<void>) {
+  const run = () => {
+    activeUserLookups += 1;
+    void task().finally(() => {
+      activeUserLookups -= 1;
+      queuedUserLookups.shift()?.();
+    });
+  };
+  if (activeUserLookups < MAX_CONCURRENT_USER_LOOKUPS) {
+    run();
+    return;
+  }
+  queuedUserLookups.push(run);
 }
 
 export function getCachedUserSync(id: string): AdminUser | undefined {

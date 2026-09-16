@@ -255,7 +255,9 @@ export function ObjectAuthorizeDrawer({
       primeUserLookupCache(accounts);
       setGrants(grantList);
       setUnresolvedLookupIds(new Set());
-      await syncLookup(grantList.flatMap((grant) => [
+      // Grant rows are usable before user-directory enrichment finishes. Keep
+      // the drawer interactive and fill creator labels in the background.
+      void syncLookup(grantList.flatMap((grant) => [
         ...(isUserDirectorySubject(grant) ? [grant.accessorId] : []),
         ...(grant.grants ?? []).flatMap((source) => grantCreatorUserId(source) ?? []),
       ]));

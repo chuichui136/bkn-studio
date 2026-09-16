@@ -16,6 +16,7 @@ vi.mock("@/modules/system-admin/services/admin.service", () => ({
 }));
 
 import {
+  MAX_CONCURRENT_USER_LOOKUPS,
   getCachedUser,
   hydrateUserLookup,
   hydrateUserLookupDetails,
@@ -59,5 +60,35 @@ describe("audit user lookup", () => {
       });
     expect(isDeletedUserSync("u-deleted")).toBe(true);
     expect(isDeletedUserSync("u-unavailable")).toBe(false);
+  });
+
+  it("limits concurrent directory lookups while resolving every distinct user", async () => {
+    const resolvers: Array<() => void> = [];
+    getUser.mockImplementation((id: string) => new Promise((resolve) => {
+      resolvers.push(() => resolve({ id }));
+    }));
+    const ids = Array.from(
+      { length: MAX_CONCURRENT_USER_LOOKUPS + 2 },
+      (_value, index) => `u-limit-${index}`,
+    );
+    const lookup = hydrateUserLookupDetails(ids);
+
+    await vi.waitFor(() => {
+      expect(getUser).toHaveBeenCalledTimes(MAX_CONCURRENT_USER_LOOKUPS);
+    });
+    resolvers.shift()?.();
+    await vi.waitFor(() => {
+      expect(getUser).toHaveBeenCalledTimes(MAX_CONCURRENT_USER_LOOKUPS + 1);
+    });
+    resolvers.shift()?.();
+    await vi.waitFor(() => {
+      expect(getUser).toHaveBeenCalledTimes(ids.length);
+    });
+    while (resolvers.length) {
+      resolvers.shift()?.();
+    }
+
+    await expect(lookup).resolves.toEqual({ deleted: [], unavailable: [] });
+    expect(getUser).toHaveBeenCalledTimes(ids.length);
   });
 });

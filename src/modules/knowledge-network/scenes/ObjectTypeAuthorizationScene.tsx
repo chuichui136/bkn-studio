@@ -231,7 +231,9 @@ export function ObjectTypeAuthorizationScene() {
       setObjectGrants(grantResult.grants);
       setUsers(directoryUsers);
       setRoles(roleResult ?? []);
-      await syncUserLookup(grantResult.grants.flatMap((grant) => [
+      // Authorization data is ready now; enrich user labels without making
+      // the page wait for every historic grantor directory lookup.
+      void syncUserLookup(grantResult.grants.flatMap((grant) => [
         ...(isUserDirectorySubject(grant) ? [grant.accessorId] : []),
         ...(grant.grants ?? []).flatMap((source) => grantCreatorUserId(source) ?? []),
       ]));
