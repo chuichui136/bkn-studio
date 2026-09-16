@@ -63,6 +63,8 @@ const authzObjects: AuthorizableObject[] = [
 const objMeta = (type: string, id: string) =>
   authzObjects.find((item) => item.type === type && item.id === id);
 
+const currentGrantorId = () => getRuntimeConfig().currentUser.id ?? undefined;
+
 const seed = (
   objType: string,
   objId: string,
@@ -74,7 +76,7 @@ const seed = (
     active: true,
     accessorId,
     authoritySource: "admin_authz",
-    createdBy: getRuntimeConfig().currentUser.id,
+    createdBy: currentGrantorId(),
     effect: "allow",
     grantId: `mock-${objType}-${objId}-${accessorId}-${index}`,
     inherited: false,
@@ -352,7 +354,7 @@ export async function upsertObjectGrant(input: ObjectGrantInput): Promise<void> 
             active: true,
             accessorId: input.accessorId,
             authoritySource: "admin_authz",
-            createdBy: getRuntimeConfig().currentUser.id,
+            createdBy: currentGrantorId(),
             effect: "allow",
             grantId: `mock-bundle-${Date.now()}`,
             inherited: false,
@@ -381,13 +383,13 @@ export async function upsertObjectGrant(input: ObjectGrantInput): Promise<void> 
         record.effect !== effect ||
         record.policySource !== "professional_rule" ||
         record.authoritySource !== "admin_authz" ||
-        record.createdBy !== getRuntimeConfig().currentUser.id,
+        record.createdBy !== currentGrantorId(),
     );
     const replacementSources = input.operations.map((operation, index): GrantRecord => ({
       active: true,
       accessorId: input.accessorId,
       authoritySource: "admin_authz",
-      createdBy: getRuntimeConfig().currentUser.id,
+      createdBy: currentGrantorId(),
       effect,
       grantId: `mock-${Date.now()}-${index}`,
       inherited: false,
@@ -497,7 +499,7 @@ type BackendGrantRecord = {
   active?: boolean;
   accessor_id?: string;
   authority_source?: GrantRecord["authoritySource"];
-  created_by?: string;
+  created_by?: string | null;
   effect?: GrantRecord["effect"];
   grant_id?: string;
   inherited?: boolean;
@@ -520,7 +522,7 @@ function mapGrantRecord(item: BackendGrantRecord, accessorId: string): GrantReco
     active: item.active !== false,
     accessorId: item.accessor_id ?? accessorId,
     authoritySource: item.authority_source ?? "system",
-    createdBy: item.created_by,
+    createdBy: item.created_by ?? undefined,
     effect: item.effect ?? "allow",
     grantId: item.grant_id ?? "",
     inherited: item.inherited === true,
