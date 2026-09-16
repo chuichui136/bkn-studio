@@ -286,7 +286,10 @@ describe("ObjectAuthorizeDrawer source records", () => {
 
     expect(screen.getByText("Readers")).not.toBeNull();
     expect(screen.queryByText("systemAdmin.objectGrants.deletedUser")).toBeNull();
-    expect(mocks.hydrateUserLookupDetails).toHaveBeenCalledWith([]);
+    expect(mocks.hydrateUserLookupDetails).toHaveBeenCalledWith(
+      [],
+      expect.any(Object),
+    );
   });
 
   it("renders the public subject without looking it up as a deleted user", async () => {
@@ -305,7 +308,10 @@ describe("ObjectAuthorizeDrawer source records", () => {
 
     expect(screen.getByText("systemAdmin.objectGrants.publicSubject")).not.toBeNull();
     expect(screen.queryByText("systemAdmin.objectGrants.deletedUser")).toBeNull();
-    expect(mocks.hydrateUserLookupDetails).toHaveBeenCalledWith([]);
+    expect(mocks.hydrateUserLookupDetails).toHaveBeenCalledWith(
+      [],
+      expect.any(Object),
+    );
   });
 
   it("revokes one direct source by stable grant_id", async () => {

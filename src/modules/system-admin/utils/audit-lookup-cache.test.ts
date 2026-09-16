@@ -91,4 +91,29 @@ describe("audit user lookup", () => {
     await expect(lookup).resolves.toEqual({ deleted: [], unavailable: [] });
     expect(getUser).toHaveBeenCalledTimes(ids.length);
   });
+
+  it("drops queued lookups when their page is no longer interested", async () => {
+    const resolvers: Array<() => void> = [];
+    getUser.mockImplementation((id: string) => new Promise((resolve) => {
+      resolvers.push(() => resolve({ id }));
+    }));
+    const controller = new AbortController();
+    const ids = Array.from(
+      { length: MAX_CONCURRENT_USER_LOOKUPS + 1 },
+      (_value, index) => `u-cancel-${index}`,
+    );
+    const lookup = hydrateUserLookupDetails(ids, { signal: controller.signal });
+
+    await vi.waitFor(() => {
+      expect(getUser).toHaveBeenCalledTimes(MAX_CONCURRENT_USER_LOOKUPS);
+    });
+    controller.abort();
+    await expect(lookup).resolves.toEqual({ deleted: [], unavailable: ids });
+    while (resolvers.length) {
+      resolvers.shift()?.();
+    }
+    await vi.waitFor(() => {
+      expect(getUser).toHaveBeenCalledTimes(MAX_CONCURRENT_USER_LOOKUPS);
+    });
+  });
 });

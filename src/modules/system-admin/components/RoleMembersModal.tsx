@@ -90,7 +90,11 @@ export function RoleMembersModal({
     }
     missing.forEach((id) => loadedUserLabelIds.current.add(id));
     const requestSeq = ++userLabelRequestSeq.current;
-    void hydrateUserLookupDetails(missing).then(() => {
+    const controller = new AbortController();
+    void hydrateUserLookupDetails(missing, { signal: controller.signal }).then(() => {
+      if (controller.signal.aborted) {
+        return;
+      }
       if (requestSeq !== userLabelRequestSeq.current) {
         return;
       }
@@ -116,6 +120,7 @@ export function RoleMembersModal({
         return next;
       });
     });
+    return () => controller.abort();
   }, [accessorIds, deptIdSet, open, userLookupRevision]);
 
   const resolveMember = useCallback(

@@ -222,13 +222,16 @@ export function ObjectAuthorizeDrawer({
   // The object-scoped grants endpoint is the primary source of grantee names. These best-effort
   // lookups only enrich older responses that lack a display name; one failed lookup must never
   // prevent the other from completing.
-  const syncLookup = useCallback(async (accessorIds: string[]) => {
+  const syncLookup = useCallback(async (accessorIds: string[], signal?: AbortSignal) => {
     const ids = [...new Set(accessorIds.filter(isUserLookupId))];
     setPendingLookupIds((current) => new Set([...current, ...ids]));
     const [departmentsResult, usersResult] = await Promise.allSettled([
       getCachedDepartments({ skipErrorToast: true }),
-      hydrateUserLookupDetails(ids),
+      hydrateUserLookupDetails(ids, { signal }),
     ]);
+    if (signal?.aborted) {
+      return;
+    }
     if (departmentsResult.status === "fulfilled") {
       setDepartments(departmentsResult.value);
     }
@@ -247,10 +250,13 @@ export function ObjectAuthorizeDrawer({
     setLookupRevision((revision) => revision + 1);
   }, []);
 
-  const loadRemote = useCallback(async () => {
+  const loadRemote = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
       const { accounts, grants: grantList } = await listObjectGrantsForObject(objType, objId);
+      if (signal?.aborted) {
+        return;
+      }
       // Prime first: these accounts are the only source of names an owner has.
       primeUserLookupCache(accounts);
       setGrants(grantList);
@@ -260,16 +266,21 @@ export function ObjectAuthorizeDrawer({
       void syncLookup(grantList.flatMap((grant) => [
         ...(isUserDirectorySubject(grant) ? [grant.accessorId] : []),
         ...(grant.grants ?? []).flatMap((source) => grantCreatorUserId(source) ?? []),
-      ]));
+      ]), signal);
       if (enterpriseAvailable) {
-        setEnterpriseGrants(await listEnterpriseObjectGrants({ resourceId: objId, resourceType: objType }));
+        const enterpriseGrants = await listEnterpriseObjectGrants({ resourceId: objId, resourceType: objType });
+        if (!signal?.aborted) {
+          setEnterpriseGrants(enterpriseGrants);
+        }
       } else {
         setEnterpriseGrants([]);
       }
     } catch (error) {
       void message.error(extractRequestErrorMessage(error));
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [enterpriseAvailable, message, objId, objType, syncLookup]);
 
@@ -280,7 +291,9 @@ export function ObjectAuthorizeDrawer({
     setCandidate(prefillGranteeId);
     setCandidateOperations([]);
     setSourceAccessorId(undefined);
-    void loadRemote();
+    const controller = new AbortController();
+    void loadRemote(controller.signal);
+    return () => controller.abort();
   }, [loadRemote, open, prefillGranteeId]);
 
   const deptMap = useMemo(

@@ -27,13 +27,25 @@ let departmentsCache: CacheEntry<AdminDepartment[]> | null = null;
 let rolesCache: CacheEntry<AdminRole[]> | null = null;
 const userCache = new Map<string, CacheEntry<AdminUser>>();
 const deletedUserCache = new Map<string, number>();
-const inFlightUserLookups = new Map<string, Promise<UserLookupResult>>();
+type UserLookupJob = {
+  cancelled: boolean;
+  promise: Promise<UserLookupResult>;
+  resolve: (result: UserLookupResult) => void;
+  started: boolean;
+  subscribers: number;
+};
+
+const inFlightUserLookups = new Map<string, UserLookupJob>();
 const queuedUserLookups: Array<() => void> = [];
 let activeUserLookups = 0;
 
 export type UserLookupDetails = {
   deleted: string[];
   unavailable: string[];
+};
+
+export type UserLookupOptions = {
+  signal?: AbortSignal;
 };
 
 type UserLookupResult = "resolved" | "deleted" | "unavailable";
@@ -90,54 +102,109 @@ export async function getCachedUser(id: string): Promise<AdminUser | null> {
   return result === "resolved" ? getCachedUserSync(id) ?? null : null;
 }
 
-export async function hydrateUserLookup(ids: string[]): Promise<string[]> {
-  const result = await hydrateUserLookupDetails(ids);
+export async function hydrateUserLookup(ids: string[], options?: UserLookupOptions): Promise<string[]> {
+  const result = await hydrateUserLookupDetails(ids, options);
   return [...result.deleted, ...result.unavailable];
 }
 
-export async function hydrateUserLookupDetails(ids: string[]): Promise<UserLookupDetails> {
+export async function hydrateUserLookupDetails(
+  ids: string[],
+  options?: UserLookupOptions,
+): Promise<UserLookupDetails> {
   const missing = [...new Set(ids)].filter(
     (id) => isUserLookupId(id) && !isFresh(userCache.get(id)) && !isDeletedUserSync(id),
   );
   if (!missing.length) {
     return { deleted: [], unavailable: [] };
   }
-  const results = await Promise.all(missing.map((id) => lookupUser(id)));
+  const results = await Promise.all(missing.map((id) => lookupUser(id, options?.signal)));
   return {
     deleted: missing.filter((_id, index) => results[index] === "deleted"),
     unavailable: missing.filter((_id, index) => results[index] === "unavailable"),
   };
 }
 
-function lookupUser(id: string): Promise<UserLookupResult> {
-  const existing = inFlightUserLookups.get(id);
-  if (existing) {
-    return existing;
+function lookupUser(id: string, signal?: AbortSignal): Promise<UserLookupResult> {
+  if (signal?.aborted) {
+    return Promise.resolve("unavailable");
   }
-
-  let resolveLookup: (result: UserLookupResult) => void;
-  const lookup = new Promise<UserLookupResult>((resolve) => {
-    resolveLookup = resolve;
-  });
-  inFlightUserLookups.set(id, lookup);
-  scheduleUserLookup(async () => {
-    let result: UserLookupResult = "unavailable";
-    try {
-      const user = await getUser(id, { skipErrorToast: true });
-      userCache.set(id, { data: user, loadedAt: Date.now() });
-      deletedUserCache.delete(id);
-      result = "resolved";
-    } catch (error) {
-      if (isRequestNotFound(error)) {
-        deletedUserCache.set(id, Date.now());
-        result = "deleted";
+  let job = inFlightUserLookups.get(id);
+  if (!job) {
+    let resolveLookup!: (result: UserLookupResult) => void;
+    const lookup = new Promise<UserLookupResult>((resolve) => {
+      resolveLookup = resolve;
+    });
+    job = {
+      cancelled: false,
+      promise: lookup,
+      resolve: resolveLookup,
+      started: false,
+      subscribers: 0,
+    };
+    inFlightUserLookups.set(id, job);
+    const scheduledJob = job;
+    scheduleUserLookup(async () => {
+      let result: UserLookupResult = "unavailable";
+      scheduledJob.started = true;
+      if (scheduledJob.cancelled) {
+        scheduledJob.resolve(result);
+        return;
       }
-    } finally {
-      inFlightUserLookups.delete(id);
-      resolveLookup!(result);
+      try {
+        const user = await getUser(id, { skipErrorToast: true });
+        userCache.set(id, { data: user, loadedAt: Date.now() });
+        deletedUserCache.delete(id);
+        result = "resolved";
+      } catch (error) {
+        if (isRequestNotFound(error)) {
+          deletedUserCache.set(id, Date.now());
+          result = "deleted";
+        }
+      } finally {
+        if (inFlightUserLookups.get(id) === scheduledJob) {
+          inFlightUserLookups.delete(id);
+        }
+        scheduledJob.resolve(result);
+      }
+    });
+  }
+  return subscribeToUserLookup(id, job, signal);
+}
+
+function subscribeToUserLookup(
+  id: string,
+  job: UserLookupJob,
+  signal?: AbortSignal,
+): Promise<UserLookupResult> {
+  job.subscribers += 1;
+  return new Promise<UserLookupResult>((resolve) => {
+    let settled = false;
+    const release = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      job.subscribers -= 1;
+      if (job.subscribers === 0 && !job.started) {
+        job.cancelled = true;
+        if (inFlightUserLookups.get(id) === job) {
+          inFlightUserLookups.delete(id);
+        }
+      }
+    };
+    const finish = (result: UserLookupResult) => {
+      signal?.removeEventListener("abort", onAbort);
+      release();
+      resolve(result);
+    };
+    const onAbort = () => finish("unavailable");
+    if (signal?.aborted) {
+      onAbort();
+      return;
     }
+    signal?.addEventListener("abort", onAbort, { once: true });
+    void job.promise.then(finish);
   });
-  return lookup;
 }
 
 function scheduleUserLookup(task: () => Promise<void>) {

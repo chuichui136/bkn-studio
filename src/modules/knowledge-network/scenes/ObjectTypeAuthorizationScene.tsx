@@ -201,24 +201,26 @@ export function ObjectTypeAuthorizationScene() {
   const [draft, setDraft] = useState<Map<string, PropertyAccessSelection>>(new Map());
   const [editingMaskProperty, setEditingMaskProperty] = useState<ObjectTypeDataProperty>();
 
-  const syncUserLookup = useCallback(async (rawIds: string[]) => {
+  const syncUserLookup = useCallback(async (rawIds: string[], signal?: AbortSignal) => {
     const ids = [...new Set(rawIds.filter(isUserLookupId))];
     setPendingUserIds((current) => new Set([...current, ...ids]));
     try {
-      await hydrateUserLookupDetails(ids);
+      await hydrateUserLookupDetails(ids, { signal });
     } catch {
       // The source rows remain readable with an unavailable-user fallback.
     } finally {
-      setPendingUserIds((current) => {
-        const next = new Set(current);
-        ids.forEach((id) => next.delete(id));
-        return next;
-      });
-      setUserLookupRevision((revision) => revision + 1);
+      if (!signal?.aborted) {
+        setPendingUserIds((current) => {
+          const next = new Set(current);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        });
+        setUserLookupRevision((revision) => revision + 1);
+      }
     }
   }, []);
 
-  const loadBase = useCallback(async () => {
+  const loadBase = useCallback(async (signal?: AbortSignal) => {
     setBaseLoading(true);
     try {
       const [grantResult, userResult, roleResult] = await Promise.all([
@@ -226,6 +228,9 @@ export function ObjectTypeAuthorizationScene() {
         listUsersPage({ limit: 500 }, { skipErrorToast: true }).catch(() => null),
         listRoles({ withMembers: true }).catch(() => null),
       ]);
+      if (signal?.aborted) {
+        return;
+      }
       const directoryUsers = mergeUsers(userResult?.users ?? [], grantResult.accounts);
       primeUserLookupCache(directoryUsers);
       setObjectGrants(grantResult.grants);
@@ -236,16 +241,19 @@ export function ObjectTypeAuthorizationScene() {
       void syncUserLookup(grantResult.grants.flatMap((grant) => [
         ...(isUserDirectorySubject(grant) ? [grant.accessorId] : []),
         ...(grant.grants ?? []).flatMap((source) => grantCreatorUserId(source) ?? []),
-      ]));
+      ]), signal);
     } catch (error) {
       void message.error(extractRequestErrorMessage(error));
     } finally {
-      setBaseLoading(false);
+      if (!signal?.aborted) {
+        setBaseLoading(false);
+      }
     }
   }, [message, objectTypeRef, syncUserLookup]);
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     void getKnowledgeNetworkObjectTypeDetail(networkId, objectTypeId)
       .then((result) => {
@@ -263,9 +271,10 @@ export function ObjectTypeAuthorizationScene() {
           setLoading(false);
         }
       });
-    void loadBase();
+    void loadBase(controller.signal);
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [loadBase, message, networkId, objectTypeId]);
 
