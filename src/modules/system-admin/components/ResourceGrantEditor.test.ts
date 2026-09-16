@@ -5,13 +5,30 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+const registryMocks = vi.hoisted(() => ({
+  retryAuthorizationRegistry: vi.fn(),
+}));
+
+vi.mock("@/modules/system-admin/hooks/use-authorization-registry", () => ({
+  useAuthorizationRegistry: () => ({
+    catalog: undefined,
+    catalogError: undefined,
+    catalogLoading: true,
+    operationsForType: () => [],
+    retryAuthorizationRegistry: registryMocks.retryAuthorizationRegistry,
+  }),
+}));
 
 import {
   addOperationToGrant,
   removeOperationFromGrant,
 } from "@/modules/system-admin/utils/resource-grant-operations";
 import type { ResourceGrant } from "@/modules/system-admin/types/admin";
+import { ResourceGrantEditor } from "./ResourceGrantEditor";
 
 function resolveRoleGrantId(wholeType: boolean, draftId: string) {
   return wholeType ? "*" : draftId.trim();
@@ -57,5 +74,15 @@ describe("ResourceGrantEditor operation changes", () => {
     const singleOperationGrant = { ...catalogGrant, operations: ["query"] };
 
     expect(removeOperationFromGrant([singleOperationGrant], singleOperationGrant, "query")).toEqual([]);
+  });
+
+  it("locks existing grants until the authorization registry is ready", () => {
+    const { container } = render(createElement(ResourceGrantEditor, {
+      onChange: vi.fn(),
+      value: [catalogGrant],
+    }));
+
+    expect(container.querySelector(".ant-tag-close-icon")).toBeNull();
+    expect(container.querySelector(".ant-btn-dangerous")).toBeNull();
   });
 });

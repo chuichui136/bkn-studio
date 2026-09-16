@@ -652,7 +652,7 @@ export function ObjectTypeAuthorizationScene() {
           source.authoritySource === candidateAuthoritySource,
       )
       .map((source) => source.operation))];
-    setCandidateOperations(directOperations.length ? directOperations : grant?.operations ?? []);
+    setCandidateOperations(directOperations);
   };
 
   const toggleCandidateOperation = (operationKey: string) => {

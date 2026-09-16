@@ -71,11 +71,14 @@ export function ResourceGrantEditor({
   const [addingGrantKey, setAddingGrantKey] = useState<string | null>(null);
 
   const ops = useMemo(() => operationsForType(draftType), [draftType, operationsForType]);
+  const registryReady = Boolean(catalog) && !catalogLoading && !catalogError;
+  const canEdit = !disabled && registryReady;
 
   const resolvedId = lockedResource ? lockedResource.id : wholeType ? WILDCARD : draftId.trim();
 
   const addGrant = () => {
     if (
+      !canEdit ||
       !draftOps.length ||
       (!lockedResource && !wholeType && (typeWideOnly || !draftId.trim()))
     ) {
@@ -98,10 +101,12 @@ export function ResourceGrantEditor({
   };
 
   const removeGrant = (grant: ResourceGrant) => {
+    if (!canEdit) return;
     onChange(value.filter((item) => item !== grant));
   };
 
   const addOperation = (grant: ResourceGrant, operation: string) => {
+    if (!canEdit) return;
     const definitions = operationsForType(grant.resource.type);
     onChange(value.map((item) =>
       sameResource(item.resource, grant.resource)
@@ -112,6 +117,7 @@ export function ResourceGrantEditor({
   };
 
   const removeOperation = (grant: ResourceGrant, operation: string) => {
+    if (!canEdit) return;
     const definitions = operationsForType(grant.resource.type);
     const removed = new Set([operation]);
     for (const definition of definitions) {
@@ -142,12 +148,12 @@ export function ResourceGrantEditor({
               <div className={styles.chipRow}>
                 {grant.operations.map((op) => (
                   <Tag
-                    closable={!disabled}
+                    closable={canEdit}
                     className={styles.permChip}
                     key={op}
                     onClose={(event) => {
                       event.preventDefault();
-                      removeOperation(grant, op);
+                      if (canEdit) removeOperation(grant, op);
                     }}
                   >
                     {grant.resource.id === WILDCARD || op === "*"
@@ -157,7 +163,7 @@ export function ResourceGrantEditor({
                       : operationLabel(grant.resource.type, op)}
                   </Tag>
                 ))}
-                {!disabled && !grant.operations.includes("*") ? (
+                {canEdit && !grant.operations.includes("*") ? (
                   addingGrantKey === `${grant.resource.type}:${grant.resource.id}:${index}` ? (
                     <Select
                       autoFocus
@@ -184,7 +190,7 @@ export function ResourceGrantEditor({
                   )
                 ) : null}
               </div>
-              {!disabled ? (
+              {canEdit ? (
                 <AppButton
                   className={[styles.actionLink, styles.actionDanger].join(" ")}
                   icon={<DeleteOutlined />}
@@ -211,7 +217,7 @@ export function ResourceGrantEditor({
             {!lockedResource ? (
               <>
                 <Select
-                  disabled={catalogLoading}
+                  disabled={!canEdit}
                   onChange={(type) => {
                     setDraftType(type);
                     setDraftOps([]);
@@ -227,7 +233,7 @@ export function ResourceGrantEditor({
                 />
                 {!typeWideOnly ? (
                   <Input
-                    disabled={wholeType}
+                    disabled={!canEdit || wholeType}
                     onChange={(event) => setDraftId(event.target.value)}
                     placeholder={t("systemAdmin.grant.resourceIdPlaceholder")}
                     style={{ flex: 1, minWidth: 140 }}
@@ -236,7 +242,7 @@ export function ResourceGrantEditor({
                 ) : null}
                 <Checkbox
                   checked={typeWideOnly || wholeType}
-                  disabled={typeWideOnly}
+                  disabled={!canEdit || typeWideOnly}
                   onChange={(event) => {
                     const checked = event.target.checked;
                     setWholeType(checked);
@@ -250,7 +256,7 @@ export function ResourceGrantEditor({
               </>
             ) : null}
             <Select
-              disabled={catalogLoading}
+              disabled={!canEdit}
               mode="multiple"
               onChange={(selected) => setDraftOps(normalizeOperations(selected, ops))}
               options={ops.map((op) => ({ label: op.label, value: op.key }))}
@@ -258,7 +264,7 @@ export function ResourceGrantEditor({
               style={{ flex: 1, minWidth: 200 }}
               value={draftOps}
             />
-            <AppButton disabled={catalogLoading} icon={<PlusOutlined />} onClick={addGrant} type="primary">
+            <AppButton disabled={!canEdit} icon={<PlusOutlined />} onClick={addGrant} type="primary">
               {t("systemAdmin.grant.add")}
             </AppButton>
           </div>
