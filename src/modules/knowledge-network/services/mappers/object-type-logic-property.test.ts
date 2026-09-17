@@ -14,6 +14,26 @@ import {
 } from "@/modules/knowledge-network/services/mappers";
 
 describe("object type tool logic property mapper", () => {
+  it("preserves tool parameter required flags", () => {
+    const property = mapLogicProperty({
+      display_name: "Availability",
+      name: "availability",
+      parameters: [
+        { name: "sku", required: true, value_from: "input" },
+        { name: "region", required: false, value_from: "input" },
+      ],
+    });
+
+    expect(property.parameters).toMatchObject([
+      { name: "sku", required: true },
+      { name: "region", required: false },
+    ]);
+    expect(toBackendLogicProperty(property).parameters).toMatchObject([
+      { name: "sku", required: true },
+      { name: "region", required: false },
+    ]);
+  });
+
   it("writes object data sources as resources", () => {
     expect(
       buildBackendObjectTypePayload(

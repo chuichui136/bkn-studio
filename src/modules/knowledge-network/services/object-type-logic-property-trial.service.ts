@@ -11,6 +11,7 @@ import { useMock, wait } from "@/modules/knowledge-network/services/shared/runti
 import type { ObjectTypeLogicProperty } from "@/modules/knowledge-network/types/knowledge-network";
 
 export type ObjectTypeLogicPropertyTrialRequest = {
+  dynamicParams?: Record<string, Record<string, unknown>>;
   instanceIdentities: Array<Record<string, string | number>>;
   logicProperties: ObjectTypeLogicProperty[];
   networkId: string;
@@ -70,6 +71,7 @@ async function invokeLogicPropertyTrial(
   const response = await http.post(
     `/ontology-query/v1/knowledge-networks/${request.networkId}/object-types/${request.objectTypeId}/properties`,
     buildLogicPropertyTrialBody({
+      dynamicParams: request.dynamicParams,
       instanceIdentities: request.instanceIdentities,
       logicProperties: request.logicProperties,
     }),

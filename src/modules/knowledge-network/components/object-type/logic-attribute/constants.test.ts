@@ -61,6 +61,7 @@ describe("buildToolLogicParameterSettings", () => {
             {
               key: "body.city",
               name: "city",
+              required: true,
               source: "Body",
               type: "string",
             },
@@ -75,6 +76,7 @@ describe("buildToolLogicParameterSettings", () => {
         {
           id: "saved-city",
           name: "body.city",
+          required: false,
           source: "Body",
           type: "string",
           value: "customer_city",
@@ -92,6 +94,7 @@ describe("buildToolLogicParameterSettings", () => {
             description: undefined,
             id: "saved-city",
             name: "body.city",
+            required: true,
             source: "Body",
             type: "string",
             value: "customer_city",
@@ -101,6 +104,7 @@ describe("buildToolLogicParameterSettings", () => {
         description: undefined,
         id: "generated-1",
         name: "body",
+        required: false,
         source: "Body",
         type: "object",
         value: undefined,

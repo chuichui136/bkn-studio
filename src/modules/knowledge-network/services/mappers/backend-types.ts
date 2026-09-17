@@ -91,6 +91,7 @@ export type BackendLogicParameter = {
   if_system_generate?: boolean;
   name: string;
   operation?: string;
+  required?: boolean;
   source?: string;
   type?: string;
   value?: string | boolean | number;

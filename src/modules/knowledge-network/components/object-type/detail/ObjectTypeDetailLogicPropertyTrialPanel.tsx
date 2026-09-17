@@ -15,6 +15,7 @@ import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { TablePaginationBar } from "@/framework/ui/common/TablePaginationBar";
 import { formatLogicPropertyTrialValue } from "@/modules/knowledge-network/lib/format-logic-property-trial-value";
+import { getLogicPropertyTrialInputParameters } from "@/modules/knowledge-network/lib/logic-property-trial-inputs";
 import { resolveObjectTypeDisplayKeyLabel } from "@/modules/knowledge-network/lib/object-type-display-key-label";
 import { filterInstanceTrialLogicProperties } from "@/modules/knowledge-network/lib/object-type-trial-metrics";
 import {
@@ -29,6 +30,8 @@ import type {
   ObjectTypeLogicProperty,
   ObjectTypeResourcePreview,
 } from "@/modules/knowledge-network/types/knowledge-network";
+
+import { ObjectTypeDetailLogicPropertyTrialInputModal } from "./ObjectTypeDetailLogicPropertyTrialInputModal";
 
 function readLogicPropertyTrialCellValue(
   row: Awaited<ReturnType<typeof getObjectTypeLogicPropertyValues>>[number] | undefined,
@@ -89,6 +92,9 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [keyword, setKeyword] = useState("");
+  const [inputModalOpen, setInputModalOpen] = useState(false);
+  const [inputSubmitting, setInputSubmitting] = useState(false);
+  const [pendingTrialRowKeys, setPendingTrialRowKeys] = useState<string[]>([]);
 
   const displayKeyLabel = useMemo(
     () => resolveObjectTypeDisplayKeyLabel(displayKey, dataProperties, preview?.columns),
@@ -139,6 +145,11 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
     [trialLogicProperties],
   );
 
+  const trialInputParameters = useMemo(
+    () => getLogicPropertyTrialInputParameters(trialLogicProperties),
+    [trialLogicProperties],
+  );
+
   const pagedSampleRows = useMemo(() => {
     const startIndex = (page - 1) * pageSize;
     return filteredSampleRows.slice(startIndex, startIndex + pageSize);
@@ -162,16 +173,19 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
   };
 
   const runTrialForRows = useCallback(
-    async (rowKeys: string[]) => {
+    async (
+      rowKeys: string[],
+      dynamicParams: Record<string, Record<string, unknown>> = {},
+    ): Promise<boolean> => {
       if (!canQueryData) {
-        return;
+        return false;
       }
 
       const entries = sampleRows.filter((item) => rowKeys.includes(item.key) && item.identity);
 
       if (entries.length === 0) {
         void message.warning(t("knowledgeNetwork.objectTypeDetailLogicTrialMissingPrimaryKey"));
-        return;
+        return false;
       }
 
       const targetKeys = entries.map((item) => item.key);
@@ -180,6 +194,7 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
 
       try {
         const result = await getObjectTypeLogicPropertyValues({
+          dynamicParams,
           instanceIdentities: entries.map((item) => item.identity!),
           logicProperties: trialLogicProperties,
           networkId,
@@ -204,8 +219,10 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
 
           return next;
         });
+        return true;
       } catch (nextError) {
         setError(extractRequestErrorMessage(nextError));
+        return false;
       } finally {
         setRunningRowKeys((current) => {
           const next = new Set(current);
@@ -215,6 +232,36 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
       }
     },
     [canQueryData, message, networkId, objectTypeId, propertyNames, sampleRows, t, trialLogicProperties],
+  );
+
+  const requestTrialForRows = useCallback(
+    (rowKeys: string[]) => {
+      if (trialInputParameters.length === 0) {
+        void runTrialForRows(rowKeys);
+        return;
+      }
+
+      setPendingTrialRowKeys(rowKeys);
+      setInputModalOpen(true);
+    },
+    [runTrialForRows, trialInputParameters.length],
+  );
+
+  const submitTrialInputs = useCallback(
+    async (dynamicParams: Record<string, Record<string, unknown>>) => {
+      setInputSubmitting(true);
+      try {
+        const succeeded = await runTrialForRows(pendingTrialRowKeys, dynamicParams);
+        if (succeeded) {
+          setInputModalOpen(false);
+          setPendingTrialRowKeys([]);
+        }
+        return succeeded;
+      } finally {
+        setInputSubmitting(false);
+      }
+    },
+    [pendingTrialRowKeys, runTrialForRows],
   );
 
   const columns: TableProps<TrialTableRow>["columns"] = useMemo(() => {
@@ -261,7 +308,7 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
         render: (_value, record) => (
           <AppButton
             loading={runningRowKeys.has(record.key)}
-            onClick={() => void runTrialForRows([record.key])}
+            onClick={() => requestTrialForRows([record.key])}
             size="small"
             type="link"
           >
@@ -275,7 +322,7 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
   }, [
     displayKeyLabel,
     highlightedLogicPropertyName,
-    runTrialForRows,
+    requestTrialForRows,
     runningRowKeys,
     t,
     trialLogicProperties,
@@ -338,7 +385,7 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
         <AppButton
           disabled={selectedRowKeys.length === 0}
           loading={batchRunning}
-          onClick={() => void runTrialForRows(selectedRowKeys)}
+          onClick={() => requestTrialForRows(selectedRowKeys)}
           type="primary"
         >
           {t("knowledgeNetwork.objectTypeDetailLogicTrialRunBatch", {
@@ -347,7 +394,7 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
         </AppButton>
         <AppButton
           loading={allRowsRunning}
-          onClick={() => void runTrialForRows(sampleRows.map((row) => row.key))}
+          onClick={() => requestTrialForRows(sampleRows.map((row) => row.key))}
         >
           {t("knowledgeNetwork.objectTypeDetailLogicTrialRunAll")}
         </AppButton>
@@ -400,6 +447,17 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
         showSizeChanger
         showTotal={(total) => t("common.total", { total })}
         total={filteredSampleRows.length}
+      />
+
+      <ObjectTypeDetailLogicPropertyTrialInputModal
+        onCancel={() => {
+          setInputModalOpen(false);
+          setPendingTrialRowKeys([]);
+        }}
+        onSubmit={submitTrialInputs}
+        open={inputModalOpen}
+        parameters={trialInputParameters}
+        submitting={inputSubmitting}
       />
     </div>
   );

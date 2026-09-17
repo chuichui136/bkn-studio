@@ -151,6 +151,7 @@ export function buildToolLogicParameterSettings(
       description: node.description,
       id: matched?.id || createId(),
       name: node.key,
+      required: node.required ?? matched?.required ?? false,
       source: FUNCTION_PARAMETER_SOURCE,
       type: node.type,
       value: matched?.value,

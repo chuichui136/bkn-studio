@@ -154,6 +154,12 @@ export const objecttypePart = {
     objectTypeDetailLogicTrialRunSingle: "Trial",
     objectTypeDetailLogicTrialRunBatch: "Batch trial ({{count}})",
     objectTypeDetailLogicTrialRunAll: "Trial all",
+    objectTypeDetailLogicTrialInputTitle: "Enter function inputs",
+    objectTypeDetailLogicTrialInputDescription:
+      "These values apply to every object selected for this trial.",
+    objectTypeDetailLogicTrialInputConfirm: "Start trial",
+    objectTypeDetailLogicTrialInputRequired: 'Enter a value for "{{name}}".',
+    objectTypeDetailLogicTrialInputJsonInvalid: "Enter a valid JSON {{type}}.",
     objectTypeDetailMetricTrialEmpty: "No related metrics are available for trial yet.",
     objectTypeDetailLogicTrialNeedSample: "Load and select a sample row under Sample rows first.",
     objectTypeDetailLogicTrialMissingPrimaryKey:

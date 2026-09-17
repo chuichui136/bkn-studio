@@ -41,4 +41,18 @@ describe("buildLogicPropertyTrialBody", () => {
       properties: ["tool_value"],
     });
   });
+
+  it("includes explicit function inputs as dynamic_params", () => {
+    expect(
+      buildLogicPropertyTrialBody({
+        dynamicParams: { discount: { rate: 0.8 } },
+        instanceIdentities: [{ order_id: "1001" }],
+        logicProperties: [toolProperty],
+      }),
+    ).toEqual({
+      _instance_identities: [{ order_id: "1001" }],
+      dynamic_params: { discount: { rate: 0.8 } },
+      properties: ["discount"],
+    });
+  });
 });
