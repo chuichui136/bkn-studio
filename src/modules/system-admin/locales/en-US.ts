@@ -845,6 +845,7 @@ export const systemAdminEnUS = {
         logId: "Log ID",
         payload: "Request payload",
         noPayload: "No additional detail",
+        columnMasking: "Column Masking",
       },
       columns: {
         time: "Time",
@@ -860,6 +861,7 @@ export const systemAdminEnUS = {
         departments: "Departments",
         roles: "Roles",
         role_bindings: "Role bindings",
+        property_grants: "Property grants",
       },
       act: {
         user_create: "Create user",
@@ -878,6 +880,7 @@ export const systemAdminEnUS = {
         role_revoke: "Revoke permission",
         role_bind: "Bind role",
         role_unbind: "Unbind role",
+        property_grants_update: "Update property permissions",
       },
     },
   },

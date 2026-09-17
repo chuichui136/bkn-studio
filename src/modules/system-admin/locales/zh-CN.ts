@@ -842,6 +842,7 @@ export const systemAdminZhCN = {
         logId: "日志 ID",
         payload: "请求详情",
         noPayload: "无附加详情",
+        columnMasking: "列掩码",
       },
       columns: {
         time: "时间",
@@ -857,6 +858,7 @@ export const systemAdminZhCN = {
         departments: "部门",
         roles: "角色",
         role_bindings: "角色绑定",
+        property_grants: "属性权限",
       },
       act: {
         user_create: "新建用户",
@@ -875,6 +877,7 @@ export const systemAdminZhCN = {
         role_revoke: "角色撤权",
         role_bind: "绑定角色",
         role_unbind: "解绑角色",
+        property_grants_update: "更新属性权限",
       },
     },
   },

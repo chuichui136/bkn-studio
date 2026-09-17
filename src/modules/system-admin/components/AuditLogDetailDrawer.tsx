@@ -24,15 +24,37 @@ type AuditLogDetailDrawerProps = {
   targetLabel: (log: AuditLog) => string | undefined;
 };
 
-function formatDetailJson(detail?: string) {
+export function formatAuditDetailJson(detail?: string, columnMaskingLabel?: string) {
   if (!detail?.trim()) {
     return "";
   }
   try {
-    return JSON.stringify(JSON.parse(detail), null, 2);
+    const parsed = JSON.parse(detail);
+    return JSON.stringify(
+      columnMaskingLabel ? localizePropertyGrantLevels(parsed, columnMaskingLabel) : parsed,
+      null,
+      2,
+    );
   } catch {
     return detail;
   }
+}
+
+function localizePropertyGrantLevels(value: unknown, columnMaskingLabel: string): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => localizePropertyGrantLevels(item, columnMaskingLabel));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      key === "level" && nestedValue === "masked"
+        ? columnMaskingLabel
+        : localizePropertyGrantLevels(nestedValue, columnMaskingLabel),
+    ]),
+  );
 }
 
 export function AuditLogDetailDrawer({
@@ -52,7 +74,16 @@ export function AuditLogDetailDrawer({
     return token ? t(`systemAdmin.audit.act.${token}`) : `${log.resource} · ${log.action}`;
   }, [log, t]);
 
-  const detailJson = useMemo(() => formatDetailJson(log?.detail), [log?.detail]);
+  const detailJson = useMemo(
+    () =>
+      formatAuditDetailJson(
+        log?.detail,
+        log?.resource === "property-grants"
+          ? t("systemAdmin.audit.detail.columnMasking")
+          : undefined,
+      ),
+    [log?.detail, log?.resource, t],
+  );
 
   if (!log) {
     return null;
