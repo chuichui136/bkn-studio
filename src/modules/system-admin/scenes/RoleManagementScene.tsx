@@ -76,7 +76,12 @@ import {
   WILDCARD,
 
 } from "@/modules/system-admin/utils/resource-catalog";
-import { isSuperAdminRole, roleDescription, roleSearchText } from "@/modules/system-admin/utils/role-catalog";
+import {
+  isSuperAdminRole,
+  resolveBuiltinRoleKey,
+  roleDescription,
+  roleSearchText,
+} from "@/modules/system-admin/utils/role-catalog";
 
 
 
@@ -886,7 +891,12 @@ export function RoleManagementScene() {
 
         <RoleDetailDrawer
 
-          canEdit={!detailRole.builtin && !isSuperAdminRole(detailRole)}
+          canEdit={
+            canEditRole
+            && !detailRole.builtin
+            && !resolveBuiltinRoleKey(detailRole)
+            && !isSuperAdminRole(detailRole)
+          }
 
           canManageMembers={canManageRoleMembers}
 
