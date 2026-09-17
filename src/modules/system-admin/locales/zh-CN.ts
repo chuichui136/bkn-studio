@@ -227,6 +227,7 @@ export const systemAdminZhCN = {
         model: "模型管理",
         execution: "执行工厂",
         system: "系统管理",
+        other: "其他资源",
       },
       createPageOpsPlaceholder: "选择允许的操作…",
       createPageGranteeHint: "支持批量选择：提交后会为每个权限主体应用同一组操作。",

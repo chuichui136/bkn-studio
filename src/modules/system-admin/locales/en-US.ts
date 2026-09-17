@@ -227,6 +227,7 @@ export const systemAdminEnUS = {
         model: "Model management",
         execution: "Execution factory",
         system: "System management",
+        other: "Other resources",
       },
       createPageOpsPlaceholder: "Pick allowed operations...",
       createPageGranteeHint: "Batch selection is supported. The same operation set will be applied to every subject.",
