@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const registryMocks = vi.hoisted(() => ({
   catalog: undefined as undefined | { resourceTypes: Array<{ id: string }> },
   catalogLoading: true,
-  operationsForType: vi.fn<() => Array<{ key: string; label: string; requires: string[] }>>(
+  operationsForType: vi.fn<(type: string) => Array<{ key: string; label: string; requires: string[] }>>(
     () => [],
   ),
   resourceTypeOptions: vi.fn<() => Array<{ label: string; value: string }>>(() => []),
