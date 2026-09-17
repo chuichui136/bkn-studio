@@ -132,6 +132,7 @@ export type ObjectTypeLogicParameter = {
   ifSystemGenerate?: boolean;
   name: string;
   operation?: string;
+  required?: boolean;
   source?: string;
   type?: string;
   value?: string | boolean | number;

@@ -11,15 +11,15 @@ import { useTranslation } from "react-i18next";
 
 import {
   buildLogicPropertyTrialDynamicParams,
-  parseLogicPropertyTrialInputValue,
   type LogicPropertyTrialInputParameter,
 } from "@/modules/knowledge-network/lib/logic-property-trial-inputs";
+import { parseDynamicParamValue } from "@/modules/knowledge-network/utils/action-type-dynamic-params";
 
 import styles from "./ObjectTypeDetailLogicPropertyTrialInputModal.module.css";
 
 type ObjectTypeDetailLogicPropertyTrialInputModalProps = {
   onCancel: () => void;
-  onSubmit: (dynamicParams: Record<string, Record<string, unknown>>) => Promise<void>;
+  onSubmit: (dynamicParams: Record<string, Record<string, unknown>>) => Promise<boolean>;
   open: boolean;
   parameters: LogicPropertyTrialInputParameter[];
   submitting?: boolean;
@@ -84,6 +84,7 @@ export function ObjectTypeDetailLogicPropertyTrialInputModal({
               const type = input.parameter.type?.toLowerCase() ?? "string";
               const isJson = type === "array" || type === "object";
               const name = input.parameter.name;
+              const required = input.parameter.required === true;
 
               return (
                 <Form.Item
@@ -99,12 +100,12 @@ export function ObjectTypeDetailLogicPropertyTrialInputModal({
                   name={input.fieldName}
                   rules={[
                     {
-                      required: true,
+                      required,
                       message: t("knowledgeNetwork.objectTypeDetailLogicTrialInputRequired", {
                         name,
                       }),
                     },
-                    ...(type === "string"
+                    ...(required && type === "string"
                       ? [
                           {
                             validator: (_rule: unknown, value: unknown) =>
@@ -124,11 +125,23 @@ export function ObjectTypeDetailLogicPropertyTrialInputModal({
                       ? [
                           {
                             validator: (_rule: unknown, value: unknown) => {
-                              if (typeof value !== "string" || !value.trim()) {
+                              if (typeof value !== "string") {
                                 return Promise.resolve();
                               }
+                              if (!value.trim()) {
+                                return required
+                                  ? Promise.reject(
+                                      new Error(
+                                        t(
+                                          "knowledgeNetwork.objectTypeDetailLogicTrialInputRequired",
+                                          { name },
+                                        ),
+                                      ),
+                                    )
+                                  : Promise.resolve();
+                              }
                               try {
-                                const parsed = parseLogicPropertyTrialInputValue(type, value);
+                                const parsed = parseDynamicParamValue(type, value);
                                 const valid =
                                   type === "array"
                                     ? Array.isArray(parsed)

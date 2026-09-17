@@ -9,9 +9,10 @@ import type {
   ObjectTypeLogicParameter,
   ObjectTypeLogicProperty,
 } from "@/modules/knowledge-network/types/knowledge-network";
-
-const JSON_PARAM_TYPES = new Set(["array", "object"]);
-const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+import {
+  parseDynamicParamValue,
+  setNestedDynamicParamValue,
+} from "@/modules/knowledge-network/utils/action-type-dynamic-params";
 
 export type LogicPropertyTrialInputParameter = {
   fieldName: string;
@@ -38,35 +39,6 @@ export function getLogicPropertyTrialInputParameters(
   );
 }
 
-export function parseLogicPropertyTrialInputValue(type: string | undefined, value: unknown) {
-  if (!JSON_PARAM_TYPES.has(type?.toLowerCase() ?? "") || typeof value !== "string") {
-    return value;
-  }
-
-  return JSON.parse(value) as unknown;
-}
-
-function setNestedValue(target: Record<string, unknown>, path: string, value: unknown) {
-  const segments = path.split(".").filter(Boolean);
-  if (segments.length === 0 || segments.some((segment) => UNSAFE_PATH_SEGMENTS.has(segment))) {
-    throw new Error(`Invalid logic property input path: ${path}`);
-  }
-
-  let current = target;
-  for (const [index, segment] of segments.entries()) {
-    if (index === segments.length - 1) {
-      current[segment] = value;
-      return;
-    }
-
-    const existing = current[segment];
-    if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
-      current[segment] = {};
-    }
-    current = current[segment] as Record<string, unknown>;
-  }
-}
-
 export function buildLogicPropertyTrialDynamicParams(
   parameters: LogicPropertyTrialInputParameter[],
   values: Record<string, unknown>,
@@ -74,11 +46,16 @@ export function buildLogicPropertyTrialDynamicParams(
   const result: Record<string, Record<string, unknown>> = {};
 
   for (const input of parameters) {
+    const value = values[input.fieldName];
+    if (value === undefined || value === null || (typeof value === "string" && !value.trim())) {
+      continue;
+    }
+
     const target = (result[input.logicPropertyName] ??= {});
-    setNestedValue(
+    setNestedDynamicParamValue(
       target,
       input.parameter.name.trim(),
-      parseLogicPropertyTrialInputValue(input.parameter.type, values[input.fieldName]),
+      parseDynamicParamValue(input.parameter.type, value),
     );
   }
 

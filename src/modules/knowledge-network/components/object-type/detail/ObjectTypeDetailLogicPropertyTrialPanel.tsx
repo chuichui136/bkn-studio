@@ -176,16 +176,16 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
     async (
       rowKeys: string[],
       dynamicParams: Record<string, Record<string, unknown>> = {},
-    ) => {
+    ): Promise<boolean> => {
       if (!canQueryData) {
-        return;
+        return false;
       }
 
       const entries = sampleRows.filter((item) => rowKeys.includes(item.key) && item.identity);
 
       if (entries.length === 0) {
         void message.warning(t("knowledgeNetwork.objectTypeDetailLogicTrialMissingPrimaryKey"));
-        return;
+        return false;
       }
 
       const targetKeys = entries.map((item) => item.key);
@@ -219,8 +219,10 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
 
           return next;
         });
+        return true;
       } catch (nextError) {
         setError(extractRequestErrorMessage(nextError));
+        return false;
       } finally {
         setRunningRowKeys((current) => {
           const next = new Set(current);
@@ -249,9 +251,12 @@ export function ObjectTypeDetailLogicPropertyTrialPanel({
     async (dynamicParams: Record<string, Record<string, unknown>>) => {
       setInputSubmitting(true);
       try {
-        await runTrialForRows(pendingTrialRowKeys, dynamicParams);
-        setInputModalOpen(false);
-        setPendingTrialRowKeys([]);
+        const succeeded = await runTrialForRows(pendingTrialRowKeys, dynamicParams);
+        if (succeeded) {
+          setInputModalOpen(false);
+          setPendingTrialRowKeys([]);
+        }
+        return succeeded;
       } finally {
         setInputSubmitting(false);
       }

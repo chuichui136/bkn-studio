@@ -37,7 +37,7 @@ export function indexActionTypeToolInputSchema(
   return result;
 }
 
-export function parseActionTypeDynamicParamValue(type: string | undefined, value: unknown) {
+export function parseDynamicParamValue(type: string | undefined, value: unknown) {
   if (!JSON_PARAM_TYPES.has(type?.toLowerCase() ?? "") || typeof value !== "string") {
     return value;
   }
@@ -45,7 +45,15 @@ export function parseActionTypeDynamicParamValue(type: string | undefined, value
   return JSON.parse(value) as unknown;
 }
 
-function setNestedValue(target: Record<string, unknown>, path: string, value: unknown) {
+export function parseActionTypeDynamicParamValue(type: string | undefined, value: unknown) {
+  return parseDynamicParamValue(type, value);
+}
+
+export function setNestedDynamicParamValue(
+  target: Record<string, unknown>,
+  path: string,
+  value: unknown,
+) {
   const segments = path.split(".").filter(Boolean);
   if (segments.length === 0 || segments.some((segment) => UNSAFE_PATH_SEGMENTS.has(segment))) {
     throw new Error(`Invalid dynamic parameter path: ${path}`);
@@ -74,10 +82,10 @@ export function buildActionTypeDynamicParams(
 
   for (const parameter of parameters) {
     const name = parameter.name.trim();
-    setNestedValue(
+    setNestedDynamicParamValue(
       result,
       name,
-      parseActionTypeDynamicParamValue(parameter.type, values[name]),
+      parseDynamicParamValue(parameter.type, values[name]),
     );
   }
 

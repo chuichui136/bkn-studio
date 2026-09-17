@@ -67,4 +67,25 @@ describe("logic property trial inputs", () => {
       tool_value: { filter: { status: "active" }, options: { limit: 10 } },
     });
   });
+
+  it("omits blank optional parameters while preserving zero values", () => {
+    const parameters = getLogicPropertyTrialInputParameters([
+      {
+        displayName: "Tool",
+        name: "tool_value",
+        parameters: [
+          { id: "query", name: "query", type: "string", valueFrom: "input" },
+          { id: "limit", name: "limit", type: "integer", valueFrom: "input" },
+        ],
+        type: "tool",
+      },
+    ]);
+
+    expect(
+      buildLogicPropertyTrialDynamicParams(parameters, {
+        [parameters[0].fieldName]: "   ",
+        [parameters[1].fieldName]: 0,
+      }),
+    ).toEqual({ tool_value: { limit: 0 } });
+  });
 });
