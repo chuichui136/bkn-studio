@@ -5,9 +5,9 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ModalFuncProps } from "antd";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/app/locales/i18n";
@@ -26,6 +26,30 @@ const services = vi.hoisted(() => ({
     },
   },
 }));
+const createMenu = vi.hoisted(() => ({
+  onResourceCreated: undefined as undefined | ((payload: {
+    tab: "toolbox" | "mcp" | "skill";
+    id: string;
+    toolId?: string;
+  }) => void),
+}));
+const auth = vi.hoisted(() => ({ refreshCurrentUser: vi.fn() }));
+const navigation = vi.hoisted(() => ({ navigate: vi.fn() }));
+const paths = vi.hoisted(() => ({ buildAppPath: vi.fn(() => "#reload-permissions") }));
+
+vi.mock("@/app/router/app-paths", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/app/router/app-paths")>()),
+  buildAppPath: paths.buildAppPath,
+}));
+
+vi.mock("react-router-dom", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router-dom")>()),
+  useNavigate: () => navigation.navigate,
+}));
+
+vi.mock("@/framework/auth/current-user", () => ({
+  refreshCurrentUser: auth.refreshCurrentUser,
+}));
 
 vi.mock("@/framework/context/use-app-services", () => ({
   useAppServices: () => services,
@@ -40,7 +64,10 @@ vi.mock("@/modules/execution-factory/utils/use-audit-user-directory", () => ({
 
 // Only the card grid and the confirmation it opens are under test.
 vi.mock("@/modules/execution-factory/components/create-menu/CreateMenu", () => ({
-  CreateMenu: () => null,
+  CreateMenu: ({ onResourceCreated }: { onResourceCreated: typeof createMenu.onResourceCreated }) => {
+    createMenu.onResourceCreated = onResourceCreated;
+    return null;
+  },
 }));
 vi.mock("@/modules/execution-factory/scenes/ExecutionUnitListOverlays", () => ({
   ExecutionUnitListOverlays: () => null,
@@ -119,8 +146,14 @@ function renderScene(search: string) {
         titleKey="executionFactory.unitsTitle"
         toolbarHintKey="executionFactory.unitsToolbarHint"
       />
+      <LocationProbe />
     </MemoryRouter>,
   );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
 }
 
 /** Opens the card's action menu and picks the lifecycle item, the way a user starts the change. */
@@ -246,5 +279,113 @@ describe("ExecutionUnitListScene lifecycle confirmation labels (#491)", () => {
       expect(withIssues.okText).toBe(locale === "en-US" ? "Publish Anyway" : "仍然发布");
       expect(withIssues.okButtonProps).toEqual({ danger: true });
     });
+  });
+});
+
+describe("ExecutionUnitListScene toolbox view permissions (#686)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    services.runtimeConfig.currentUser.permissions = ["execution-factory:function:view"];
+    window.localStorage.clear();
+    api.listToolboxMarket.mockResolvedValue({ items: [], total: 0 });
+    api.listToolboxes.mockResolvedValue({ items: [], total: 0 });
+    api.listOperatorCategories.mockResolvedValue([]);
+  });
+
+  it("redirects a Function-only user away from the API view and hides the API tab", async () => {
+    renderScene("?activeTab=toolbox&toolboxView=openapi");
+
+    expect(await screen.findByRole("tab", { name: i18n.t("executionFactory.functionToolboxTab") })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: i18n.t("executionFactory.openapiToolboxTab") })).toBeNull();
+    await waitFor(() => expect(api.listToolboxes.mock.calls).toContainEqual([expect.objectContaining({ metadataType: "function" })]));
+  });
+
+  it("shows only the API view for an API-only user", async () => {
+    services.runtimeConfig.currentUser.permissions = ["execution-factory:toolbox:view"];
+    renderScene("?activeTab=toolbox&toolboxView=function");
+
+    expect(await screen.findByRole("tab", { name: i18n.t("executionFactory.openapiToolboxTab") })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: i18n.t("executionFactory.functionToolboxTab") })).toBeNull();
+    await waitFor(() => expect(api.listToolboxes.mock.calls).toContainEqual([expect.objectContaining({ metadataType: "openapi" })]));
+  });
+
+  it("keeps both toolbox views in the catalog for a catalog-only user", async () => {
+    services.runtimeConfig.currentUser.permissions = ["execution-factory:catalog:view"];
+    render(
+      <MemoryRouter initialEntries={["/execution-factory/catalog?activeTab=toolbox&toolboxView=function"]}>
+        <ExecutionUnitListScene
+          descriptionKey="executionFactory.catalogDescription"
+          marketMode
+          titleKey="executionFactory.catalogTitle"
+          toolbarHintKey="executionFactory.catalogToolbarHint"
+        />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("tab", { name: i18n.t("executionFactory.openapiToolboxTab") })).toBeTruthy();
+    expect(screen.getByRole("tab", {
+      name: new RegExp(`^${i18n.t("executionFactory.functionToolboxTab")}`),
+      selected: true,
+    })).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toBe("/execution-factory/catalog?activeTab=toolbox&toolboxView=function");
+    await waitFor(() => expect(api.listToolboxMarket).toHaveBeenCalledWith(expect.objectContaining({
+      metadataType: "function",
+      page: 1,
+      pageSize: 20,
+    })));
+    expect(api.listToolboxes).not.toHaveBeenCalled();
+  });
+});
+
+describe("ExecutionUnitListScene creation navigation (#686)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createMenu.onResourceCreated = undefined;
+    window.localStorage.clear();
+    api.listOperatorCategories.mockResolvedValue([]);
+    api.listSkills.mockResolvedValue({ items: [], total: 0 });
+    api.listToolboxes.mockResolvedValue({ items: [], total: 0 });
+    api.listMcps.mockResolvedValue({ items: [], total: 0 });
+  });
+
+  it.each([
+    ["skill", "toolbox", "api-box", "api-tool", "/execution-factory/toolboxes/api-box/tools?toolId=api-tool", "toolbox"],
+    ["skill", "toolbox", "function-box", undefined, "/execution-factory/toolboxes/function-box/tools?create=1", "function"],
+    ["skill", "mcp", "mcp-created", undefined, "/execution-factory/mcp/mcp-created", "mcp"],
+    ["mcp", "skill", "skill-created", undefined, "/execution-factory/skills/skill-created", "skill"],
+  ] as const)("refreshes owner grants before navigating from %s to %s", async (
+    startTab, tab, id, toolId, destination, grantType,
+  ) => {
+    services.runtimeConfig.currentUser.permissions = [`execution-factory:${startTab}:view`];
+    let resolveRefresh!: (user: typeof services.runtimeConfig.currentUser) => void;
+    auth.refreshCurrentUser.mockImplementation(() => new Promise((resolve) => {
+      resolveRefresh = resolve;
+    }));
+    renderScene(`?activeTab=${startTab}`);
+
+    act(() => createMenu.onResourceCreated?.({ tab, id, toolId }));
+    expect(auth.refreshCurrentUser).toHaveBeenCalledOnce();
+    expect(navigation.navigate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveRefresh({ permissions: [`execution-factory:${grantType}:view`] });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith(destination));
+    expect(services.runtimeConfig.currentUser.permissions).toContain(`execution-factory:${grantType}:view`);
+  });
+
+  it("reloads the target route if refreshed permissions cannot be loaded", async () => {
+    services.runtimeConfig.currentUser.permissions = ["execution-factory:skill:view"];
+    auth.refreshCurrentUser.mockRejectedValue(new Error("temporary failure"));
+    renderScene("?activeTab=skill");
+
+    act(() => createMenu.onResourceCreated?.({ tab: "mcp", id: "mcp-created" }));
+
+    await waitFor(() => expect(paths.buildAppPath).toHaveBeenCalledWith("/execution-factory/mcp/mcp-created"));
+    expect(window.location.hash).toBe("#reload-permissions");
+    expect(navigation.navigate).not.toHaveBeenCalled();
+    window.location.hash = "";
   });
 });

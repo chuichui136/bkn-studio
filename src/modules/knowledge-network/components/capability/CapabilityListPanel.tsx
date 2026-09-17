@@ -64,10 +64,10 @@ const TITLE_KEY = {
   skill: "Skills",
 } as const;
 
-/** Permission enforced by the concrete execution-factory detail route for each row kind. */
-const DETAIL_VIEW_PERMISSION: Record<CapabilitySectionKind, string> = {
-  api: "execution-factory:tool:view",
-  function: "execution-factory:tool:view",
+/** A Function row opens its parent workbench, which supports read-only Function viewers. */
+const DETAIL_LINK_PERMISSION: Record<CapabilitySectionKind, string> = {
+  api: "execution-factory:toolbox:view",
+  function: "execution-factory:function:view",
   mcp: "execution-factory:mcp:view",
   skill: "execution-factory:skill:view",
 };
@@ -135,7 +135,11 @@ function referencingSources(record: CapabilityBindingRecord): CapabilitySource[]
  * Where the asset itself lives; a binding is only a reference to it. An MCP tool has no page of its
  * own — it is addressed by name inside its Server — so it points at the Server.
  */
-function executionFactoryPath(record: CapabilityBindingRecord) {
+function executionFactoryPath(record: CapabilityBindingRecord, kind: CapabilitySectionKind) {
+  if (kind === "function") {
+    return `/execution-factory/toolboxes/${record.boxId}/tools?toolId=${encodeURIComponent(record.capabilityId)}`;
+  }
+
   switch (record.capabilityType) {
     case "skill":
       return `/execution-factory/skills/${record.capabilityId}`;
@@ -177,13 +181,16 @@ export function CapabilityListPanel({
   const toolKind: "api" | "function" | undefined =
     kind === "api" || kind === "function" ? kind : undefined;
   const factoryTab = isSkill ? "skill" : isMcp ? "mcp" : "toolbox";
+  const factoryManagementPermission = kind === "function"
+    ? "execution-factory:function:view"
+    : executionFactoryViewPermissionByTab[factoryTab];
   const canViewExecutionFactory = hasPermissions({
     currentPermissions: runtimeConfig.currentUser.permissions,
-    requiredPermissions: executionFactoryViewPermissionByTab[factoryTab],
+    requiredPermissions: factoryManagementPermission,
   });
   const canViewCapabilityDetail = hasPermissions({
     currentPermissions: runtimeConfig.currentUser.permissions,
-    requiredPermissions: DETAIL_VIEW_PERMISSION[kind],
+    requiredPermissions: DETAIL_LINK_PERMISSION[kind],
   });
 
   const filtered = useMemo(() => {
@@ -308,7 +315,7 @@ export function CapabilityListPanel({
           <AppButton
             onClick={() => {
               // The detail scene's back button returns here rather than to its own list page.
-              void navigate(executionFactoryPath(record), { state: buildReturnToState(location) });
+              void navigate(executionFactoryPath(record, kind), { state: buildReturnToState(location) });
             }}
             type="link"
           >
@@ -447,9 +454,11 @@ export function CapabilityListPanel({
                 void navigate(
                   isSkill
                     ? "/execution-factory/units?activeTab=skill"
-                    : isMcp
+                  : isMcp
                       ? "/execution-factory/units?activeTab=mcp"
-                      : "/execution-factory/units?activeTab=toolbox",
+                      : kind === "function"
+                        ? "/execution-factory/units?activeTab=toolbox&toolboxView=function"
+                        : "/execution-factory/units?activeTab=toolbox",
                 );
               }}
               type="link"

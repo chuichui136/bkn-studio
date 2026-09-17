@@ -20,7 +20,7 @@
  * The mappings below align with the backend's actual authorization points.
  */
 
-/** Resource types used by execution-factory permission checks. */
+/** Resource types used by execution-factory permission checks. The legacy `operator` type is retired. */
 type SafeResourceType = "function" | "tool_box" | "mcp" | "skill";
 
 const ALL_RESOURCE_TYPES: SafeResourceType[] = ["function", "tool_box", "mcp", "skill"];
@@ -77,10 +77,12 @@ const OVERRIDES: Record<string, string[]> = {
   // Import/export: export requires read access to any of the four types; import creates the target type.
   "impex:export": ALL_RESOURCE_TYPES.map((type) => `${type}:view`),
   "impex:import": ALL_RESOURCE_TYPES.map((type) => `${type}:create`),
-  // Tools have no resource type of their own; write operations always use the parent toolbox's modify grant.
-  "tool:create": ["tool_box:modify"],
-  "tool:delete": ["tool_box:modify"],
-  "tool:edit": ["tool_box:modify"],
+  // Tools have no resource type of their own; writes use the stored parent box kind.
+  "tool:view": ["tool_box:view", "function:view"],
+  "tool:debug": ["tool_box:execute", "function:execute"],
+  "tool:create": ["tool_box:modify", "function:modify"],
+  "tool:delete": ["tool_box:modify", "function:modify"],
+  "tool:edit": ["tool_box:modify", "function:modify"],
 };
 
 /**

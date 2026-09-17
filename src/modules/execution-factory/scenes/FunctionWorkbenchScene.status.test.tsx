@@ -17,6 +17,7 @@ vi.mock("react-i18next", async (importOriginal) => ({
 }));
 
 vi.mock("react-router-dom", () => ({
+  useLocation: () => ({ state: null }),
   useNavigate: () => vi.fn(),
 }));
 
@@ -32,6 +33,8 @@ vi.mock("@/framework/context/use-app-services", () => ({
           "execution-factory:tool:delete",
           "execution-factory:tool:edit",
           "execution-factory:toolbox:edit",
+          "execution-factory:function:edit",
+          "execution-factory:function:debug",
         ],
       },
     },
@@ -52,6 +55,14 @@ vi.mock("@/modules/execution-factory/scenes/function-workbench/FunctionDependenc
 
 vi.mock("@/modules/model-resources/services/llm.service", () => ({
   listLlmModels: vi.fn().mockResolvedValue({ items: [] }),
+}));
+
+const { getResourceOperations } = vi.hoisted(() => ({
+  getResourceOperations: vi.fn(),
+}));
+
+vi.mock("@/modules/model-resources/services/authorization.service", () => ({
+  getResourceOperations,
 }));
 
 vi.mock("@/modules/execution-factory/services/category.service", () => ({
@@ -106,6 +117,18 @@ describe("FunctionWorkbenchScene status wiring", () => {
     listTools.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50, boxId: "box-1" });
     createTool.mockResolvedValue({ successIds: ["tool-new"], failures: [] });
     updateToolStatus.mockResolvedValue(undefined);
+    getResourceOperations.mockResolvedValue([{ id: "adhoc", operation: ["execute"] }]);
+  });
+
+  it("does not expose ad-hoc run when only a function-set execute grant is present", async () => {
+    getResourceOperations.mockResolvedValue([{ id: "adhoc", operation: [] }]);
+
+    render(<FunctionWorkbenchScene boxId="box-1" />);
+
+    await waitFor(() => expect(getResourceOperations).toHaveBeenCalledWith([
+      { type: "function", id: "adhoc" },
+    ]));
+    expect(screen.queryByText("executionFactory.workbenchRun")).toBeNull();
   });
 
   /**

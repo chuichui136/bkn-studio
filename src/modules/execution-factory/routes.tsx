@@ -18,6 +18,11 @@ const UnitManagementListPage = lazy(async () => {
   return { default: module.UnitManagementListPage };
 });
 
+const ExecutionUnitCreatePage = lazy(async () => {
+  const module = await import("@/modules/execution-factory/pages/ExecutionUnitCreatePage");
+  return { default: module.ExecutionUnitCreatePage };
+});
+
 const CatalogListPage = lazy(async () => {
   const module = await import("@/modules/execution-factory/pages/CatalogListPage");
   return { default: module.CatalogListPage };
@@ -118,10 +123,12 @@ export const executionFactoryRoutes: RouteObject[] = [
         titleKey: "executionFactory.toolboxCreateTitle",
       },
     },
-    element: withRouteLoading(
-      <ExecutionUnitTabRedirect activeTab="toolbox" migrationFrom="toolboxes-new" openCreate />,
-      ["execution-factory:toolbox:create"],
-    ),
+    // Creation must not be routed through the list page: a role may legitimately have
+    // create without view, and the list page would reject that caller before the form opens.
+    element: withRouteLoading(<ToolboxFormPage mode="create" />, [
+      "execution-factory:toolbox:create",
+      "execution-factory:function:create",
+    ]),
   },
   {
     path: "execution-factory/toolboxes/:boxId/edit",
@@ -132,7 +139,7 @@ export const executionFactoryRoutes: RouteObject[] = [
         titleKey: "executionFactory.toolboxEditTitle",
       },
     },
-    element: withRouteLoading(<ToolboxFormPage mode="edit" />, ["execution-factory:toolbox:edit"]),
+    element: withRouteLoading(<ToolboxFormPage mode="edit" />, ["execution-factory:toolbox:edit", "execution-factory:function:edit"]),
   },
   {
     path: "execution-factory/toolboxes/:boxId/tools",
@@ -143,7 +150,7 @@ export const executionFactoryRoutes: RouteObject[] = [
         titleKey: "executionFactory.toolboxToolsPageTitle",
       },
     },
-    element: withRouteLoading(<ToolboxToolsPage />, ["execution-factory:toolbox:view"]),
+    element: withRouteLoading(<ToolboxToolsPage />, ["execution-factory:toolbox:view", "execution-factory:function:view"]),
   },
   {
     path: "execution-factory/toolboxes/:boxId/tools/:toolId/edit",
@@ -180,7 +187,7 @@ export const executionFactoryRoutes: RouteObject[] = [
       },
     },
     element: withRouteLoading(
-      <ExecutionUnitTabRedirect activeTab="mcp" migrationFrom="mcp-new" openCreate />,
+      <ExecutionUnitCreatePage activeTab="mcp" />,
       ["execution-factory:mcp:create"],
     ),
   },
@@ -219,7 +226,7 @@ export const executionFactoryRoutes: RouteObject[] = [
       },
     },
     element: withRouteLoading(
-      <ExecutionUnitTabRedirect activeTab="skill" migrationFrom="skills-new" openCreate />,
+      <ExecutionUnitCreatePage activeTab="skill" />,
       ["execution-factory:skill:create"],
     ),
   },

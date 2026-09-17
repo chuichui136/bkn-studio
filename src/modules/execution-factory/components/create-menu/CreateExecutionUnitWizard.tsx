@@ -11,6 +11,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { AppButton } from "@/framework/ui/common/AppButton";
+import { useAppServices } from "@/framework/context/use-app-services";
+import { hasPermissions } from "@/framework/permission/has-permissions";
 import type { ExecutionUnitTab } from "@/modules/execution-factory/components/execution-unit/types";
 
 import { CreateMcpDrawer } from "./CreateMcpDrawer";
@@ -27,6 +29,7 @@ export type CreatedExecutionUnitPayload = {
 };
 
 type CreateExecutionUnitWizardProps = {
+  allowedTabsOverride?: readonly ExecutionUnitTab[];
   initialTab: ExecutionUnitTab;
   onClose: () => void;
   onRefresh?: () => void;
@@ -35,6 +38,7 @@ type CreateExecutionUnitWizardProps = {
 };
 
 export function CreateExecutionUnitWizard({
+  allowedTabsOverride,
   initialTab,
   onClose,
   onRefresh,
@@ -42,6 +46,17 @@ export function CreateExecutionUnitWizard({
   open,
 }: CreateExecutionUnitWizardProps) {
   const { t } = useTranslation();
+  const { runtimeConfig } = useAppServices();
+  const allowedMetadataTypes = (["openapi", "function"] as const).filter((kind) => hasPermissions({
+    currentPermissions: runtimeConfig.currentUser.permissions,
+    requiredPermissions: kind === "function" ? "execution-factory:function:create" : "execution-factory:toolbox:create",
+  }));
+  const allowedTabs = (["operator", "toolbox", "mcp", "skill"] as const).filter((tab) =>
+    (!allowedTabsOverride || allowedTabsOverride.includes(tab)) && (tab === "toolbox" ? allowedMetadataTypes.length > 0 : hasPermissions({
+      currentPermissions: runtimeConfig.currentUser.permissions,
+      requiredPermissions: `execution-factory:${tab}:create`,
+    })),
+  );
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [selectedTab, setSelectedTab] = useState<ExecutionUnitTab>(initialTab);
@@ -88,7 +103,9 @@ export function CreateExecutionUnitWizard({
 
   const renderStepBody = () => {
     if (step === 0) {
-      return <CreateWizardTypeStep onChange={setSelectedTab} value={selectedTab} />;
+      return <CreateWizardTypeStep allowedTabs={allowedTabs} onChange={(tab) => {
+        if (allowedTabs.includes(tab)) setSelectedTab(tab);
+      }} value={selectedTab} />;
     }
 
     switch (selectedTab) {
@@ -103,6 +120,7 @@ export function CreateExecutionUnitWizard({
         return (
           <CreateToolboxForm
             formId="create-toolbox-form"
+            allowedMetadataTypes={[...allowedMetadataTypes]}
             onCreated={(boxId) => handleCreated("toolbox", boxId)}
           />
         );
@@ -169,6 +187,8 @@ export function CreateExecutionUnitWizard({
       </Space>
     );
   };
+
+  if (!allowedTabs.includes(initialTab) || !allowedTabs.includes(selectedTab)) return null;
 
   return (
     <Drawer

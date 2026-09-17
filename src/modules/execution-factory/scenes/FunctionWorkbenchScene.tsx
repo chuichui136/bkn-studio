@@ -26,10 +26,11 @@ import {
 import { Alert, Drawer, Dropdown, Spin, Switch, Tag, Tooltip } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAppServices } from "@/framework/context/use-app-services";
 import { PermissionGate } from "@/framework/permission/PermissionGate";
+import { hasPermissions } from "@/framework/permission/has-permissions";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { CodeEditor } from "@/modules/execution-factory/components/CodeEditor";
@@ -72,6 +73,8 @@ import {
   type FunctionTemplateId,
 } from "@/modules/execution-factory/utils/function-templates";
 import { buildSampleEvent } from "@/modules/execution-factory/utils/function-sample-event";
+import { readReturnTo } from "@/modules/execution-factory/utils/back-navigation";
+import { useFunctionCodeAccess } from "@/modules/execution-factory/utils/use-function-code-access";
 import { buildJsonSchemaFromParameters } from "@/modules/execution-factory/utils/function-parameter-schema";
 import { resolveToolStatusOkTextKey } from "@/modules/execution-factory/utils/status-confirm-ok-text";
 import { collectToolboxPublishIssues } from "@/modules/execution-factory/utils/toolbox-publish-preflight";
@@ -186,12 +189,27 @@ function emptyFunction(code: string): WorkbenchFunction {
 type FunctionWorkbenchSceneProps = {
   boxId: string;
   onBack?: () => void;
+  /** A linked capability may name a specific persisted Function in this toolbox. */
+  targetToolId?: string;
 };
 
-export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchSceneProps) {
+export function FunctionWorkbenchScene({ boxId, onBack, targetToolId }: FunctionWorkbenchSceneProps) {
   const { t } = useTranslation();
-  const { message, modal } = useAppServices();
+  const { message, modal, runtimeConfig } = useAppServices();
   const navigate = useNavigate();
+  const location = useLocation();
+  const canEditFunction = hasPermissions({
+    currentPermissions: runtimeConfig.currentUser.permissions,
+    requiredPermissions: "execution-factory:function:edit",
+  });
+  const {
+    canExecuteAdhoc: canExecuteAdhocFunction,
+    canGenerate: canCreateFunction,
+  } = useFunctionCodeAccess();
+  const canGenerateFunction = canEditFunction && canCreateFunction;
+  // Derived parameters only land in the editable draft; a read-only caller would get a result
+  // that is thrown away. Runs still derive silently to build their request inputs.
+  const canDeriveParams = canEditFunction && canExecuteAdhocFunction;
 
   const [toolbox, setToolbox] = useState<ToolboxRecord | null>(null);
   const [boxName, setBoxName] = useState("");
@@ -278,10 +296,16 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
       try {
         const record = await getToolbox(boxId);
         const listResult = await listTools(boxId, { page: 1, pageSize: MAX_LOADED_FUNCTIONS });
+        const detailIds = listResult.items.map((item) => item.toolId);
+        // A capability link can target a Function beyond the workbench's first-page rail. Load that
+        // item as well so the linked capability always opens the Function that was clicked.
+        if (targetToolId && !detailIds.includes(targetToolId)) {
+          detailIds.push(targetToolId);
+        }
         const details = await Promise.all(
-          listResult.items.map(async (item) => {
+          detailIds.map(async (toolId) => {
             try {
-              return await getToolDetail(boxId, item.toolId);
+              return await getToolDetail(boxId, toolId);
             } catch {
               return null;
             }
@@ -316,8 +340,10 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
         setToolbox(record);
         setBoxName(record.name);
         setBoxCategory(record.categoryType ?? record.categoryName);
-        setFunctions(loaded.length > 0 ? loaded : [emptyFunction(DEFAULT_FUNCTION_TEMPLATE)]);
-        setActiveKey(loaded[0]?.key ?? null);
+        // A view-only caller must not receive an unsaved local draft merely by opening an empty
+        // toolbox. Editors still get the draft that starts the creation flow.
+        setFunctions(loaded.length > 0 ? loaded : canEditFunction ? [emptyFunction(DEFAULT_FUNCTION_TEMPLATE)] : []);
+        setActiveKey(loaded.some((item) => item.key === targetToolId) ? targetToolId ?? null : loaded[0]?.key ?? null);
       } catch (error) {
         if (!cancelled) {
           setLoadError(extractRequestErrorMessage(error));
@@ -332,7 +358,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
     return () => {
       cancelled = true;
     };
-  }, [boxId]);
+  }, [boxId, canEditFunction, targetToolId]);
 
   useEffect(() => {
     if (!activeKey && functions.length > 0) {
@@ -352,7 +378,10 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
       }
 
       // Function workbench can only come from Function sets, so do not return to API toolboxes.
-      void navigate("/execution-factory/units?activeTab=toolbox&toolboxView=function");
+      void navigate(
+        readReturnTo(location.state) ?? "/execution-factory/units?activeTab=toolbox&toolboxView=function",
+        { replace: true },
+      );
     };
 
     // This discards the entire function body, not just a few form fields. Drafts live only in memory and are lost on exit.
@@ -527,6 +556,9 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
    * by persistFunction later.
    */
   const handleToggleStatus = (target: WorkbenchFunction) => {
+    if (!canEditFunction) {
+      return;
+    }
     const nextStatus: ToolStatus = target.status === "enabled" ? "disabled" : "enabled";
     const applyLocal = () => {
       setFunctions((current) =>
@@ -563,6 +595,9 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
    * start disabled to avoid exposing incomplete functions to agents.
    */
   const handleDuplicateFunction = (target: WorkbenchFunction) => {
+    if (!canEditFunction) {
+      return;
+    }
     const copy: WorkbenchFunction = {
       ...target,
       // The parameter tree is nested, so use a deep copy to avoid sharing nodes.
@@ -625,6 +660,9 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
    * to a neighbor, or a blank function is created to keep the editor usable.
    */
   const handleDeleteFunction = (target: WorkbenchFunction) => {
+    if (!canEditFunction) {
+      return;
+    }
     const runDelete = async () => {
       try {
         if (target.toolId) {
@@ -670,6 +708,9 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
    * functions are sent in one API request.
    */
   const handleBatchStatus = (nextStatus: ToolStatus) => {
+    if (!canEditFunction) {
+      return;
+    }
     const targets = functions.filter((item) => selectedKeys.includes(item.key));
     if (targets.length === 0) {
       return;
@@ -708,6 +749,9 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
 
   /** Delete in bulk: persisted items use batch delete, while local items are removed directly. */
   const handleBatchDelete = () => {
+    if (!canEditFunction) {
+      return;
+    }
     const targets = functions.filter((item) => selectedKeys.includes(item.key));
     if (targets.length === 0) {
       return;
@@ -788,6 +832,9 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
   };
 
   const handleSaveDraft = async () => {
+    if (!canEditFunction) {
+      return;
+    }
     if (isPublished) {
       const confirmed = await confirmPublishIssues({
         hint: t("executionFactory.workbenchSavePublishedContent"),
@@ -817,9 +864,9 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
    * state updates; silent suppresses messages for implicit derivations.
    */
   const handleDeriveParams = async (
-    options?: { silent?: boolean },
+    options?: { persist?: boolean; silent?: boolean },
   ): Promise<FunctionParameterDef[] | null> => {
-    if (!active) {
+    if (!active || !canExecuteAdhocFunction) {
       return null;
     }
 
@@ -836,18 +883,21 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
         return null;
       }
 
-      derivedCodeRef.current[active.key] = active.code;
-      patchActive({
-        ...(inferred.name && !active.name ? { name: inferred.name } : {}),
-        ...(inferred.description && !active.description
-          ? { description: inferred.description }
-          : {}),
-        // Supported derivation is authoritative: no-argument functions can return [] or omit
-        // the field, and both must clear inputs to avoid retaining parameters from a prior function.
-        inputs: inferred.inputs ?? [],
-        ...(inferred.outputs ? { outputs: inferred.outputs } : {}),
-      });
-      if (!options?.silent) {
+      const persist = options?.persist ?? canEditFunction;
+      if (persist) {
+        derivedCodeRef.current[active.key] = active.code;
+        patchActive({
+          ...(inferred.name && !active.name ? { name: inferred.name } : {}),
+          ...(inferred.description && !active.description
+            ? { description: inferred.description }
+            : {}),
+          // Supported derivation is authoritative: no-argument functions can return [] or omit
+          // the field, and both must clear inputs to avoid retaining parameters from a prior function.
+          inputs: inferred.inputs ?? [],
+          ...(inferred.outputs ? { outputs: inferred.outputs } : {}),
+        });
+      }
+      if (persist && !options?.silent) {
         void message.success(t("executionFactory.functionDeriveApplied"));
       }
       return inferred.inputs ?? [];
@@ -895,7 +945,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
 
   /** Templates replace all code, so confirm before overwriting user-authored content. */
   const applyTemplate = (id: FunctionTemplateId) => {
-    if (!active) {
+    if (!active || !canEditFunction) {
       return;
     }
 
@@ -919,7 +969,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
     Boolean(item.code.trim()) && derivedCodeRef.current[item.key] !== item.code;
 
   const handleRun = async () => {
-    if (!active) {
+    if (!active || !canExecuteAdhocFunction) {
       return;
     }
 
@@ -934,7 +984,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
       // Re-derive changed code before execution to avoid sending stale parameters.
       let inputs = active.inputs;
       if (needsDerive(active)) {
-        const derived = await handleDeriveParams({ silent: true });
+        const derived = await handleDeriveParams({ persist: canEditFunction, silent: true });
         if (derived) {
           inputs = derived;
         }
@@ -1142,7 +1192,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
             <AppButton onClick={() => setSelectedKeys([])} size="small">
               {t("common.cancel")}
             </AppButton>
-            <PermissionGate permissions="execution-factory:tool:edit">
+            <PermissionGate permissions="execution-factory:function:edit">
               {/*
                 保存期间锁住：还没落库的函数扳状态只改本地 status，而 persistFunction
                 建工具用的是保存开始那一刻的快照状态，保存途中翻转会被静默吞掉。
@@ -1182,7 +1232,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
             activeId={activeKey}
             emptyText={t("executionFactory.workbenchFunctionListEmptyFiltered")}
             footer={
-              <PermissionGate permissions="execution-factory:tool:create">
+              <PermissionGate permissions="execution-factory:function:edit">
                 <AppButton
                   block
                   className={styles.railAdd}
@@ -1253,7 +1303,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
             }}
             selectable
             selectedIds={selectedKeys}
-            statusPermission="execution-factory:tool:edit"
+            statusPermission="execution-factory:function:edit"
             title={t("executionFactory.workbenchFunctionList", { count: functions.length })}
           />
         </div>
@@ -1266,17 +1316,18 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                   <span className={styles.fnHeadTitle}>
                     <span className={styles.fxBadge}>fx</span>
                     <InlineEditableText
-                      autoEdit={!active.toolId && !active.name}
+                      autoEdit={canEditFunction && !active.toolId && !active.name}
                       className={styles.fnHeadFx}
                       emptyLabel={t("executionFactory.workbenchClickToName")}
                       key={active.key}
                       onChange={(name) => patchActive({ name })}
                       placeholder="high_value_customers"
+                      readOnly={!canEditFunction}
                       value={active.name}
                     />
                   </span>
                   <span className={styles.fnHeadActions}>
-                    <PermissionGate permissions="execution-factory:tool:edit">
+                    <PermissionGate permissions="execution-factory:function:edit">
                       <Tooltip title={t("executionFactory.workbenchStatusHint")}>
                         <span className={styles.fnStatusToggle}>
                           <Switch
@@ -1301,30 +1352,32 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                         </span>
                       </Tooltip>
                     </PermissionGate>
-                    <Dropdown
-                      menu={{
-                        items: [
-                          {
-                            key: "duplicate",
-                            label: t("executionFactory.workbenchDuplicateFunction"),
-                            onClick: () => handleDuplicateFunction(active),
-                          },
-                          {
-                            key: "delete",
-                            danger: true,
-                            label: t("executionFactory.workbenchDeleteFunction"),
-                            onClick: () => handleDeleteFunction(active),
-                          },
-                        ],
-                      }}
-                      trigger={["click"]}
-                    >
-                      <AppButton
-                        aria-label={t("executionFactory.cardMenu.more")}
-                        icon={<EllipsisOutlined />}
-                        type="text"
-                      />
-                    </Dropdown>
+                    <PermissionGate permissions="execution-factory:function:edit">
+                      <Dropdown
+                        menu={{
+                          items: [
+                            {
+                              key: "duplicate",
+                              label: t("executionFactory.workbenchDuplicateFunction"),
+                              onClick: () => handleDuplicateFunction(active),
+                            },
+                            {
+                              key: "delete",
+                              danger: true,
+                              label: t("executionFactory.workbenchDeleteFunction"),
+                              onClick: () => handleDeleteFunction(active),
+                            },
+                          ],
+                        }}
+                        trigger={["click"]}
+                      >
+                        <AppButton
+                          aria-label={t("executionFactory.cardMenu.more")}
+                          icon={<EllipsisOutlined />}
+                          type="text"
+                        />
+                      </Dropdown>
+                    </PermissionGate>
                   </span>
                 </div>
                 <div className={styles.fnHeadDesc}>
@@ -1334,6 +1387,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                     multiline
                     onChange={(description) => patchActive({ description })}
                     placeholder={t("executionFactory.workbenchDescriptionPlaceholder")}
+                    readOnly={!canEditFunction}
                     rows={2}
                     value={active.description}
                   />
@@ -1361,6 +1415,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                       {t("executionFactory.functionLogic")}
                     </span>
                     <div className={styles.editorTools}>
+                      <PermissionGate permissions="execution-factory:function:edit">
                       <Dropdown
                         menu={{
                           items: (["standard", "pydantic"] as FunctionTemplateId[]).map((id) => ({
@@ -1383,7 +1438,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                           {t("executionFactory.functionInsertTemplate")}
                         </AppButton>
                       </Dropdown>
-                      {hasDefaultLlm ? (
+                      {hasDefaultLlm && canGenerateFunction ? (
                         <AppButton
                           icon={<ThunderboltOutlined />}
                           onClick={() => setAiOpen(true)}
@@ -1392,12 +1447,13 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                           {t("executionFactory.functionAiGenerate")}
                         </AppButton>
                       ) : null}
+                      </PermissionGate>
                       <span className={styles.toolsDivider} />
                       <AppButton
                         icon={<ProfileOutlined />}
                         onClick={() => {
                           setDockTab("params");
-                          if (needsDerive(active)) {
+                          if (canDeriveParams && needsDerive(active)) {
                             void handleDeriveParams();
                           }
                         }}
@@ -1429,7 +1485,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                           {t("executionFactory.workbenchDirty")}
                         </span>
                       ) : null}
-                      <PermissionGate permissions="execution-factory:tool:edit">
+                      <PermissionGate permissions="execution-factory:function:edit">
                         <AppButton
                           disabled={!hasUnsavedChanges}
                           loading={saving}
@@ -1446,6 +1502,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                       height="fill"
                       language="python"
                       onChange={(code) => patchActive({ code })}
+                      readOnly={!canEditFunction}
                       value={active.code}
                     />
                   </div>
@@ -1466,7 +1523,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                     {t("executionFactory.workbenchConsoleNote")}
                   </span>
                   <span className={styles.consoleRun}>
-                    <PermissionGate permissions="execution-factory:tool:debug">
+                    {canExecuteAdhocFunction ? (
                       <Tooltip title={t("executionFactory.workbenchRunShortcut")}>
                         <AppButton
                           className={styles.runButton}
@@ -1481,7 +1538,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
                           {t("executionFactory.workbenchRun")}
                         </AppButton>
                       </Tooltip>
-                    </PermissionGate>
+                    ) : null}
                   </span>
                 </div>
                 {consoleCollapsed ? null : (
@@ -1546,7 +1603,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
       </div>
 
       <Drawer
-        extra={
+        extra={canDeriveParams ? (
           <AppButton
             icon={<ReloadOutlined />}
             loading={deriving}
@@ -1554,7 +1611,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
           >
             {t("executionFactory.functionDeriveParams")}
           </AppButton>
-        }
+        ) : null}
         onClose={() => setDockTab(null)}
         open={dockTab === "params"}
         title={t("executionFactory.workbenchParamsTab")}
@@ -1603,6 +1660,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
             onChange={(next) =>
               patchActive(ioTab === "inputs" ? { inputs: next } : { outputs: next })
             }
+            readOnly={!canEditFunction}
             value={ioTab === "inputs" ? active?.inputs : active?.outputs}
           />
         ) : (
@@ -1625,6 +1683,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
         >
           <FunctionDependencyPanel
             onChange={(dependencies) => patchActive({ dependencies })}
+            readOnly={!canEditFunction}
             value={active?.dependencies ?? []}
           />
         </Drawer>
@@ -1633,6 +1692,9 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
       <FunctionAiGenerateModal
         initialCode={active?.code}
         onApply={(result) => {
+          if (!canEditFunction) {
+            return;
+          }
           if (result.type === "code") {
             patchActive({ code: result.code });
             return;
@@ -1648,7 +1710,7 @@ export function FunctionWorkbenchScene({ boxId, onBack }: FunctionWorkbenchScene
           setDockTab("params");
         }}
         onClose={() => setAiOpen(false)}
-        open={aiOpen}
+        open={canGenerateFunction && aiOpen}
       />
 
     </div>

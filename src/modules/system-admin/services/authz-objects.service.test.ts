@@ -169,6 +169,25 @@ describe("authz object picker catalog service", () => {
     expect(getMock).not.toHaveBeenCalled();
   });
 
+  it("函数集授权按工具集 box_id 取名，不走算子接口", async () => {
+    postMock.mockResolvedValue({ data: { entries: [{ id: "box-fn-1", name: "金额核对" }] } });
+
+    const [resolved] = await resolveGrantNames([{
+      accessorId: "u1",
+      objId: "box-fn-1",
+      objName: "box-fn-1",
+      objType: "function",
+      operations: ["view"],
+    }]);
+
+    expect(resolved.objName).toBe("金额核对");
+    expect(postMock).toHaveBeenCalledWith(
+      "/agent-operator-integration/v1/tool-box/names",
+      { ids: ["box-fn-1"] },
+      { skipErrorToast: true },
+    );
+  });
+
   it("知识网络子对象显示业务名称和所属知识网络，而不是 opaque 复合 ID", async () => {
     postMock.mockResolvedValue({
       data: { entries: [{ id: "ecommerce-ops", name: "电商经营决策知识网络" }] },

@@ -75,13 +75,12 @@ const RESOURCE_FALLBACK_LABELS: Record<string, string> = {
   connector_type: "Data connection",
   concept_group: "Concept group",
   data_flow: "Data flow",
-  function: "Function",
   knowledge_network: "Knowledge network",
   large_model: "Large model",
   mcp: "MCP service",
   metric: "Metric",
   object_type: "Object type",
-  operator: "Function set",
+  operator: "Operator",
   resource: "Data resource",
   relation_type: "Relation type",
   risk_type: "Risk type",
@@ -90,6 +89,7 @@ const RESOURCE_FALLBACK_LABELS: Record<string, string> = {
   small_model: "Small model",
   stream_data_pipeline: "Stream data pipeline",
   tool_box: "API toolset",
+  function: "Function set",
 };
 
 const CATALOG_CRUD_AUTHZ = ["view_detail", "create", "modify", "delete", "authorize", "task_manage"];
@@ -192,6 +192,7 @@ const ROLE_GRANT_EXCLUDED_RESOURCE_TYPES = new Set([
   "risk_type",
   "safe_admin",
   "small_model",
+  // Legacy operators are retired; keep the type only so existing grants still render.
   "operator",
 ]);
 
@@ -300,4 +301,9 @@ function operationFallbackLabel(op: string): string {
 
 function resourceTypeFallbackLabel(type: string): string {
   return RESOURCE_FALLBACK_LABELS[type] ?? type;
+}
+
+export function resourceTypeDescription(type: string): string {
+  if (type !== "operator" && type !== "tool_box" && type !== "function") return "";
+  return i18n.t(`systemAdmin.resourceCatalog.descriptions.${type}`);
 }

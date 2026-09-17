@@ -10,13 +10,14 @@ import { describe, expect, it } from "vitest";
 import {
   canAccessExecutionUnitManagement,
   filterAccessibleExecutionUnitTabs,
+  filterAccessibleToolboxViews,
 } from "@/modules/execution-factory/permissions";
 
 describe("filterAccessibleExecutionUnitTabs", () => {
   const tabs = ["operator", "toolbox", "mcp", "skill"] as const;
 
   it.each([
-    ["function", ["execution-factory:operator:view"], ["operator"]],
+    ["function", ["execution-factory:function:view"], ["toolbox"]],
     ["toolbox", ["execution-factory:toolbox:view"], ["toolbox"]],
     ["MCP", ["execution-factory:mcp:view"], ["mcp"]],
     ["Skill", ["execution-factory:skill:view"], ["skill"]],
@@ -36,5 +37,16 @@ describe("filterAccessibleExecutionUnitTabs", () => {
 
   it("allows the management list when the user can view at least one execution-unit type", () => {
     expect(canAccessExecutionUnitManagement(["execution-factory:mcp:view"])).toBe(true);
+  });
+});
+
+
+describe("filterAccessibleToolboxViews", () => {
+  it.each([
+    [["execution-factory:function:view"], ["function"]],
+    [["execution-factory:toolbox:view"], ["openapi"]],
+    [["execution-factory:toolbox:view", "execution-factory:function:view"], ["openapi", "function"]],
+  ])("keeps only resource views the user can read", (permissions, expected) => {
+    expect(filterAccessibleToolboxViews(permissions)).toEqual(expected);
   });
 });

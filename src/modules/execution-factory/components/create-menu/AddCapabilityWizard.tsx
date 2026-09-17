@@ -15,7 +15,10 @@ import { useNavigate } from "react-router-dom";
 
 
 
+import { buildAppPath } from "@/app/router/app-paths";
+import { refreshCurrentUser } from "@/framework/auth/current-user";
 import { useAppServices } from "@/framework/context/use-app-services";
+import { canCreateCapabilityMode } from "@/modules/execution-factory/utils/capability-create-menu";
 
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 
@@ -133,7 +136,8 @@ export function AddCapabilityWizard({
 
   const { t } = useTranslation();
 
-  const { message } = useAppServices();
+  const { message, runtimeConfig } = useAppServices();
+  const currentPermissions = runtimeConfig.currentUser.permissions;
 
   const navigate = useNavigate();
 
@@ -141,8 +145,9 @@ export function AddCapabilityWizard({
   const importOpenApiFormRef = useRef<ImportOpenApiCapabilityFormHandle>(null);
 
   const allowedModes = useMemo(
-    () => allowedModesOverride ?? getCapabilityModesForTab(contextTab),
-    [allowedModesOverride, contextTab],
+    () => (allowedModesOverride ?? (lockInitialMode && initialMode ? [initialMode] : getCapabilityModesForTab(contextTab)))
+      .filter((candidate) => canCreateCapabilityMode(currentPermissions, candidate, initialBoxId)),
+    [allowedModesOverride, contextTab, currentPermissions, initialBoxId, initialMode, lockInitialMode],
   );
 
   // With an override, its number of modes determines whether to skip; two or more force the cards
@@ -157,7 +162,7 @@ export function AddCapabilityWizard({
 
   const [mode, setMode] = useState<CapabilityUxMode | undefined>(
 
-    initialMode ?? allowedModesOverride?.[0] ?? getDefaultCapabilityModeForTab(contextTab),
+    initialMode ?? allowedModes[0] ?? getDefaultCapabilityModeForTab(contextTab),
 
   );
 
@@ -177,7 +182,7 @@ export function AddCapabilityWizard({
 
 
     const resolvedMode =
-      initialMode ?? allowedModesOverride?.[0] ?? getDefaultCapabilityModeForTab(contextTab);
+      initialMode ?? allowedModes[0];
 
     setMode(resolvedMode);
 
@@ -186,7 +191,7 @@ export function AddCapabilityWizard({
     setSubmitting(false);
     setCreatedNextStep(null);
 
-  }, [allowedModesOverride, contextTab, initialBoxId, initialMode, open, skipModeStep]);
+  }, [allowedModes, initialMode, open, skipModeStep]);
 
 
 
@@ -295,18 +300,21 @@ export function AddCapabilityWizard({
       return;
     }
 
+    const destination = (mode === "debug" || mode === "edit") && createdNextStep.toolId
+      ? `/execution-factory/toolboxes/${createdNextStep.boxId}/tools/${createdNextStep.toolId}/edit${
+        mode === "debug" ? "?focus=debug" : ""
+      }`
+      : `/execution-factory/toolboxes/${createdNextStep.boxId}/tools`;
     handleClose();
 
-    if ((mode === "debug" || mode === "edit") && createdNextStep.toolId) {
-      void navigate(
-        `/execution-factory/toolboxes/${createdNextStep.boxId}/tools/${createdNextStep.toolId}/edit${
-          mode === "debug" ? "?focus=debug" : ""
-        }`,
-      );
-      return;
-    }
-
-    void navigate(`/execution-factory/toolboxes/${createdNextStep.boxId}/tools`);
+    void (async () => {
+      try {
+        runtimeConfig.currentUser = await refreshCurrentUser();
+        void navigate(destination);
+      } catch {
+        window.location.assign(buildAppPath(destination));
+      }
+    })();
   };
 
 
@@ -514,7 +522,9 @@ export function AddCapabilityWizard({
 
           mode={mode}
 
-          onModeChange={setMode}
+          onModeChange={(nextMode) => {
+            if (allowedModes.includes(nextMode)) setMode(nextMode);
+          }}
 
         />
 
@@ -822,6 +832,9 @@ export function AddCapabilityWizard({
   };
 
 
+
+  if (!allowedModes.length || !mode || !allowedModes.includes(mode) ||
+      (initialMode && !allowedModes.includes(initialMode))) return null;
 
   return (
 

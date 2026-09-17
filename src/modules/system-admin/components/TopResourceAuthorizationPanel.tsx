@@ -41,10 +41,10 @@ const ICONS: Record<string, ReactNode> = {
   catalog: <DatabaseOutlined />,
   knowledge_network: <DeploymentUnitOutlined />,
   mcp: <ApiOutlined />,
-  function: <FunctionOutlined />,
   operator: <FunctionOutlined />,
   skill: <AppstoreOutlined />,
   tool_box: <ToolOutlined />,
+  function: <FunctionOutlined />,
 };
 
 const DEFAULT_PAGE_SIZE = 10;

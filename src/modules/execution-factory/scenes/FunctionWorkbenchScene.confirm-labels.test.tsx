@@ -11,9 +11,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/app/locales/i18n";
 import { FunctionWorkbenchScene } from "@/modules/execution-factory/scenes/FunctionWorkbenchScene";
+import { inferFunctionSchema } from "@/modules/execution-factory/services/function.service";
+
+const router = vi.hoisted(() => ({
+  location: { state: null as { returnTo?: string } | null },
+  navigate: vi.fn(),
+}));
 
 vi.mock("react-router-dom", () => ({
-  useNavigate: () => vi.fn(),
+  useLocation: () => router.location,
+  useNavigate: () => router.navigate,
 }));
 
 const services = vi.hoisted(() => ({
@@ -27,6 +34,8 @@ const services = vi.hoisted(() => ({
         "execution-factory:tool:delete",
         "execution-factory:tool:edit",
         "execution-factory:toolbox:edit",
+        "execution-factory:function:edit",
+        "execution-factory:function:debug",
       ],
     },
   },
@@ -46,8 +55,16 @@ vi.mock("@/modules/execution-factory/components/FunctionAiGenerateModal", () => 
 vi.mock("@/modules/execution-factory/scenes/function-workbench/FunctionDependencyPanel", () => ({
   FunctionDependencyPanel: () => null,
 }));
+const access = vi.hoisted(() => ({
+  getResourceOperations: vi.fn(),
+  listLlmModels: vi.fn(),
+}));
+
+vi.mock("@/modules/model-resources/services/authorization.service", () => ({
+  getResourceOperations: access.getResourceOperations,
+}));
 vi.mock("@/modules/model-resources/services/llm.service", () => ({
-  listLlmModels: vi.fn().mockResolvedValue({ items: [] }),
+  listLlmModels: access.listLlmModels,
 }));
 vi.mock("@/modules/execution-factory/services/category.service", () => ({
   listOperatorCategories: vi.fn().mockResolvedValue([]),
@@ -110,6 +127,18 @@ async function confirmedDialog() {
 describe("FunctionWorkbenchScene function status confirmation labels (#491)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    router.location = { state: null };
+    services.runtimeConfig.currentUser.permissions = [
+      "execution-factory:tool:create",
+      "execution-factory:tool:debug",
+      "execution-factory:tool:delete",
+      "execution-factory:tool:edit",
+      "execution-factory:toolbox:edit",
+      "execution-factory:function:edit",
+      "execution-factory:function:debug",
+    ];
+    access.getResourceOperations.mockResolvedValue([{ id: "adhoc", operation: ["execute"] }]);
+    access.listLlmModels.mockResolvedValue({ items: [] });
     api.getToolbox.mockResolvedValue({
       boxId: "box-1",
       metadataType: "function",
@@ -130,6 +159,95 @@ describe("FunctionWorkbenchScene function status confirmation labels (#491)", ()
         functionInput: { code: "def handler(event):\n    return event\n", inputs: [], outputs: [] },
       });
     });
+  });
+
+  it("does not expose function mutations to a view-only user", async () => {
+    services.runtimeConfig.currentUser.permissions = ["execution-factory:function:view"];
+
+    render(<FunctionWorkbenchScene boxId="box-1" />);
+
+    await railItem("sum_orders");
+    expect(screen.queryByRole("button", { name: "executionFactory.cardMenu.more" })).toBeNull();
+    expect(screen.queryByText(i18n.t("common.save"))).toBeNull();
+    expect(api.deleteTools).not.toHaveBeenCalled();
+  });
+
+  it("does not create an unsaved draft for a view-only user opening an empty toolbox", async () => {
+    services.runtimeConfig.currentUser.permissions = ["execution-factory:function:view"];
+    api.listTools.mockResolvedValue({ boxId: "box-1", items: [], page: 1, pageSize: 50, total: 0 });
+    const addEventListener = vi.spyOn(window, "addEventListener");
+
+    render(<FunctionWorkbenchScene boxId="box-1" />);
+
+    await waitFor(() => expect(api.listTools).toHaveBeenCalled());
+    expect(addEventListener.mock.calls.some(([type]) => type === "beforeunload")).toBe(false);
+    addEventListener.mockRestore();
+  });
+
+  it("does not offer parameter derivation to a read-only user who may run ad-hoc code", async () => {
+    await i18n.changeLanguage("en-US");
+    services.runtimeConfig.currentUser.permissions = [
+      "execution-factory:function:view",
+      "execution-factory:function:debug",
+    ];
+
+    render(<FunctionWorkbenchScene boxId="box-1" />);
+
+    await railItem("sum_orders");
+    // The run control proves the ad-hoc execute check resolved before asserting derivation is absent.
+    expect(await screen.findByText(i18n.t("executionFactory.workbenchRun"))).toBeTruthy();
+    fireEvent.click(screen.getByText(i18n.t("executionFactory.workbenchParamsTab")));
+
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.queryByText(i18n.t("executionFactory.functionDeriveParams"))).toBeNull();
+    expect(inferFunctionSchema).not.toHaveBeenCalled();
+    expect(services.message.success).not.toHaveBeenCalled();
+  });
+
+  it("opens the linked Function and returns to its knowledge-network capability list", async () => {
+    services.runtimeConfig.currentUser.permissions = ["execution-factory:function:view"];
+    router.location = { state: { returnTo: "/knowledge-network/kn-1/capabilities?kind=function" } };
+
+    render(<FunctionWorkbenchScene boxId="box-1" targetToolId="tool-2" />);
+
+    const selected = await screen.findByRole("option", { name: /rank_customers/ });
+    expect(selected).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    fireEvent.click(screen.getByLabelText(/返回|Back/));
+    expect(router.navigate).toHaveBeenCalledWith(
+      "/knowledge-network/kn-1/capabilities?kind=function",
+      { replace: true },
+    );
+  });
+
+  it("loads a linked Function even when it is outside the first workbench rail page", async () => {
+    api.listTools.mockResolvedValue({
+      boxId: "box-1",
+      items: FUNCTIONS,
+      page: 1,
+      pageSize: 50,
+      total: 51,
+    });
+    api.getToolDetail.mockImplementation((_boxId: string, toolId: string) =>
+      Promise.resolve({
+        description: "desc",
+        functionInput: { code: "def handler(event):\n    return event\n", inputs: [], outputs: [] },
+        name: toolId === "tool-51" ? "late_function" : toolId,
+        status: "enabled",
+        toolId,
+      }),
+    );
+
+    render(<FunctionWorkbenchScene boxId="box-1" targetToolId="tool-51" />);
+
+    expect(await screen.findByRole("option", { name: /late_function/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(api.getToolDetail).toHaveBeenCalledWith("box-1", "tool-51");
   });
 
   describe.each(["en-US", "zh-CN"] as const)("in %s", (locale) => {

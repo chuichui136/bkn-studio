@@ -22,7 +22,13 @@ import {
 import type { AuthorizableObject } from "@/modules/system-admin/types/authz";
 import type { ResourceGrant, ResourceRef } from "@/modules/system-admin/types/admin";
 import { HIDDEN_INSTANCE_OPS, isAuthzObjectPickerType } from "@/modules/system-admin/utils/authz-catalog";
-import { operationLabel, isRoleGrantResourceType, resourceTypeLabel, WILDCARD } from "@/modules/system-admin/utils/resource-catalog";
+import {
+  operationLabel,
+  isRoleGrantResourceType,
+  resourceTypeDescription,
+  resourceTypeLabel,
+  WILDCARD,
+} from "@/modules/system-admin/utils/resource-catalog";
 import { availableOperationsForGrant } from "@/modules/system-admin/utils/resource-grant-operations";
 import { useAuthorizationRegistry } from "@/modules/system-admin/hooks/use-authorization-registry";
 
@@ -300,7 +306,9 @@ export function ResourceGrantEditor({
             return (
               <div className={styles.grantItem} key={`${grant.resource.type}:${grant.resource.id}:${index}`}>
                 <div className={styles.grantMeta}>
-                  <Tag className={styles.roleTag}>{resourceTypeLabel(grant.resource.type)}</Tag>
+                  <Tooltip title={resourceTypeDescription(grant.resource.type)}>
+                    <Tag className={styles.roleTag}>{resourceTypeLabel(grant.resource.type)}</Tag>
+                  </Tooltip>
                   <span
                     className={[styles.slugChip, styles.grantResourceName].join(" ")}
                     title={grant.resource.id === WILDCARD ? undefined : grant.resource.id}
@@ -556,6 +564,9 @@ export function ResourceGrantEditor({
             ) : null}
           </div>
         </>
+      ) : null}
+      {!disabled && resourceTypeDescription(draftType) ? (
+        <p>{resourceTypeDescription(draftType)}</p>
       ) : null}
     </div>
   );

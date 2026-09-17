@@ -34,6 +34,11 @@ export const systemAdminEnUS = {
       users: "Users",
     },
     resourceCatalog: {
+      descriptions: {
+        operator: "Legacy operator grant. Operators are retired and not offered for new grants. Function set creation, AI generation, and temporary code execution are governed by Function set grants.",
+        tool_box: "Controls API toolsets only. Create adds a set; Modify changes its APIs; Execute runs them.",
+        function: "Controls function sets only. Create adds a set and allows AI function generation; Modify changes its functions; Execute runs them, including temporary code execution.",
+      },
       operations: {
         "*": "All operations",
         authorize: "Authorize",
@@ -306,13 +311,12 @@ export const systemAdminEnUS = {
         concept_group: "Concept group",
         connector_type: "Data connection",
         data_flow: "Data flow",
-        function: "Function set",
         knowledge_network: "Knowledge network",
         large_model: "Large model",
         mcp: "MCP service",
         metric: "Metric",
         object_type: "Object type",
-        operator: "Function set",
+        operator: "Operator",
         relation_type: "Relation type",
         resource: "Data resource",
         risk_type: "Risk type",
@@ -321,6 +325,7 @@ export const systemAdminEnUS = {
         small_model: "Small model",
         stream_data_pipeline: "Stream data pipeline",
         tool_box: "API toolset",
+        function: "Function set",
       },
     },
     roleCatalog: {

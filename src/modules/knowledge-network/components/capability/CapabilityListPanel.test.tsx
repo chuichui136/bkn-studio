@@ -157,7 +157,7 @@ describe("CapabilityListPanel restricted empty state", () => {
   });
 
   it.each([
-    ["function", "execution-factory:toolbox:view"],
+    ["function", "execution-factory:function:view"],
     ["api", "execution-factory:toolbox:view"],
     ["mcp", "execution-factory:mcp:view"],
     ["skill", "execution-factory:skill:view"],
@@ -174,12 +174,12 @@ describe("CapabilityListPanel restricted empty state", () => {
   it.each([
     [
       "function",
-      "execution-factory:tool:view",
-      "/execution-factory/toolboxes/box-1/tools/capability-1/edit",
+      "execution-factory:function:view",
+      "/execution-factory/toolboxes/box-1/tools?toolId=capability-1",
     ],
     [
       "api",
-      "execution-factory:tool:view",
+      "execution-factory:toolbox:view",
       "/execution-factory/toolboxes/box-1/tools/capability-1/edit",
     ],
     ["mcp", "execution-factory:mcp:view", "/execution-factory/mcp/box-1"],
@@ -198,5 +198,28 @@ describe("CapabilityListPanel restricted empty state", () => {
     expect(mocks.navigate).toHaveBeenCalledWith(expectedPath, {
       state: { returnTo: "/knowledge-network/kn-1/capabilities?kind=all" },
     });
+  });
+
+  it("does not expose an API detail link to a Function-only viewer", () => {
+    // `tool:view` is derived for Function sets too, but this row points at an API toolbox.
+    mocks.permissions.current = [
+      "execution-factory:function:view",
+      "execution-factory:tool:view",
+    ];
+
+    renderPanel("api", false, dataFor("api"));
+
+    expect(screen.queryByRole("button", { name: "Visible capability" })).toBeNull();
+    expect(screen.getByText("Visible capability").tagName).toBe("SPAN");
+  });
+
+  it("opens the Function management view for a Function-only user", () => {
+    mocks.permissions.current = ["execution-factory:function:view"];
+    renderPanel("function");
+
+    fireEvent.click(screen.getByText("knowledgeNetwork.capabilityManageInFactory"));
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/execution-factory/units?activeTab=toolbox&toolboxView=function",
+    );
   });
 });

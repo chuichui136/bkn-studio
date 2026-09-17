@@ -102,9 +102,9 @@ const OBJ_ICON: Record<string, ReactNode> = {
   knowledge_network: <DeploymentUnitOutlined />,
   small_model: <AppstoreOutlined />,
   large_model: <AppstoreOutlined />,
-  function: <FunctionOutlined />,
   operator: <FunctionOutlined />,
   tool_box: <ToolOutlined />,
+  function: <FunctionOutlined />,
   mcp: <ApiOutlined />,
   skill: <BulbOutlined />,
 };

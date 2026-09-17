@@ -125,6 +125,13 @@ describe("isStudioPermissionGranted", () => {
     expect(isStudioPermissionGranted("execution-factory:operator:view", grants, false)).toBe(true);
   });
 
+  it("函数集授权不连带 API 工具集", () => {
+    const functionGrants = flattenSafeGrants([{ operations: ["create", "execute"], resource: { id: "*", type: "function" } }]);
+    expect(isStudioPermissionGranted("execution-factory-lab:function:create", functionGrants, false)).toBe(true);
+    expect(isStudioPermissionGranted("execution-factory-lab:function:debug", functionGrants, false)).toBe(true);
+    expect(isStudioPermissionGranted("execution-factory:toolbox:create", functionGrants, false)).toBe(false);
+  });
+
   it("工具没有独立资源类型，写操作落到父工具箱的 modify", () => {
     const withoutToolboxModify = flattenSafeGrants([
       { operations: ["view", "create"], resource: { id: "*", type: "tool_box" } },
@@ -133,6 +140,24 @@ describe("isStudioPermissionGranted", () => {
     expect(isStudioPermissionGranted("execution-factory:tool:view", withoutToolboxModify, false)).toBe(true);
     expect(isStudioPermissionGranted("execution-factory:tool:create", withoutToolboxModify, false)).toBe(false);
     expect(isStudioPermissionGranted("execution-factory:tool:edit", withoutToolboxModify, false)).toBe(false);
+  });
+
+  it("API 工具调试权限由已声明的 toolbox:debug 和 tool_box:execute 派生", () => {
+    const permission = "execution-factory:toolbox:debug";
+    const executeGrants = flattenSafeGrants([
+      { operations: ["execute"], resource: { id: "*", type: "tool_box" } },
+    ]);
+    const functionGrants = flattenSafeGrants([
+      { operations: ["execute"], resource: { id: "*", type: "function" } },
+    ]);
+    const wildcardGrants = flattenSafeGrants([
+      { operations: ["*"], resource: { id: "*", type: "*" } },
+    ]);
+
+    expect(defaultDevPermissions).toContain(permission);
+    expect(deriveStudioPermissions(defaultDevPermissions, executeGrants, false)).toContain(permission);
+    expect(deriveStudioPermissions(defaultDevPermissions, functionGrants, false)).not.toContain(permission);
+    expect(deriveStudioPermissions(defaultDevPermissions, wildcardGrants, false)).toContain(permission);
   });
 
   it("市场浏览按 public_access 判定，不误用 bkn-safe 的同名 catalog 数据目录", () => {

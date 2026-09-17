@@ -13,6 +13,7 @@ import {
   operationsForType,
   ROLE_GRANT_RESOURCE_TYPES,
   resourceTypeLabel,
+  resourceTypeDescription,
 } from "@/modules/system-admin/utils/resource-catalog";
 
 describe("resource-catalog", () => {
@@ -95,10 +96,30 @@ describe("resource-catalog", () => {
   it("uses the execution-factory names for executable resource types", async () => {
     await i18n.changeLanguage("zh-CN");
 
-    expect(resourceTypeLabel("function")).toBe("函数集");
+    expect(resourceTypeLabel("operator")).toBe("算子");
     expect(resourceTypeLabel("tool_box")).toBe("API 工具集");
+    expect(resourceTypeLabel("function")).toBe("函数集");
     expect(resourceTypeLabel("mcp")).toBe("MCP 服务");
     expect(resourceTypeLabel("skill")).toBe("SKILL 包");
+  });
+
+  it("explains the separate operator and toolset grants in both locales", async () => {
+    // AI generation and temporary code execution are authorized on `function`, not `operator`.
+    await i18n.changeLanguage("zh-CN");
+    expect(resourceTypeDescription("operator")).toContain("函数集权限");
+    expect(resourceTypeDescription("tool_box")).toContain("修改");
+    expect(resourceTypeDescription("function")).toContain("修改");
+    expect(resourceTypeDescription("function")).toContain("AI 生成");
+    expect(resourceTypeDescription("function")).toContain("临时代码执行");
+    await i18n.changeLanguage("en-US");
+    expect(resourceTypeLabel("operator")).toBe("Operator");
+    expect(resourceTypeLabel("tool_box")).toBe("API toolset");
+    expect(resourceTypeLabel("function")).toBe("Function set");
+    expect(resourceTypeDescription("operator")).toContain("Function set grants");
+    expect(resourceTypeDescription("tool_box")).toContain("Modify");
+    expect(resourceTypeDescription("function")).toContain("AI function generation");
+    expect(resourceTypeDescription("function")).toContain("temporary code execution");
+    expect(resourceTypeDescription("skill")).toBe("");
   });
 
   it("keeps task management out of knowledge-network grants", () => {
