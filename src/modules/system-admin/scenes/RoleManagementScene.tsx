@@ -888,7 +888,7 @@ export function RoleManagementScene() {
 
           canEdit={!detailRole.builtin && !isSuperAdminRole(detailRole)}
 
-          canManageMembers
+          canManageMembers={canManageRoleMembers}
 
           onClose={() => setDetailRole(null)}
 
