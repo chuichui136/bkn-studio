@@ -53,12 +53,7 @@ vi.mock("@/modules/data-catalog/components/CatalogTreePanel", () => ({
 vi.mock("@/modules/data-catalog/components/ResourceFormDrawer", () => ({
   ResourceFormDrawer: () => null,
 }));
-vi.mock("@/modules/data-catalog/components/AuthorizedResourceListPanel", () => ({
-  AuthorizedResourceListPanel: ({ catalogId }: { catalogId: string }) => (
-    <output data-testid="authorized-catalog-id">{catalogId}</output>
-  ),
-}));
-vi.mock("@/modules/data-catalog/components/CatalogDetailPanel", () => ({
+vi.mock("@/modules/data-catalog/components/ResourceListPanel", () => ({
   default: ({ catalog }: { catalog: CatalogRecord }) => <output data-testid="selected-catalog-id">{catalog.id}</output>,
 }));
 vi.mock("@/modules/data-catalog/services/mock-db", () => ({
@@ -73,6 +68,11 @@ vi.mock("@/modules/data-catalog/services/resource.service", () => ({
 vi.mock("@/shared/catalog", () => ({
   catalogListAllQuery: () => ({ page: 1, pageSize: 100 }),
   getCatalog: getCatalogMock,
+  isCatalogSummaryOnly: (item: CatalogRecord | undefined) => (
+    item?.operations.includes("view_summary") === true
+    && item?.operations.includes("view_detail") !== true
+    && item?.operations.includes("*") !== true
+  ),
   listCatalogConnectorTypeStats: listCatalogConnectorTypeStatsMock,
   listCatalogs: listCatalogsMock,
 }));
@@ -231,39 +231,20 @@ describe("DataCatalogScene", () => {
     expect(screen.getByTestId("catalog-ids").textContent).toBe("catalog-1");
   });
 
-  it("keeps directly granted resources available when catalog access is forbidden", async () => {
-    listCatalogsMock.mockResolvedValue({ items: [], total: 0 });
-    getCatalogMock.mockRejectedValue(new AxiosError(
-      "Forbidden",
-      undefined,
-      undefined,
-      undefined,
-      {
-        status: 403,
-        statusText: "Forbidden",
-        headers: new AxiosHeaders(),
-        config: { headers: new AxiosHeaders() },
-        data: {},
-      },
-    ));
-    listCatalogResourcePageMock.mockResolvedValue({
-      items: [{ id: "resource-a" }],
+  it("opens a listed summary-only catalog in the shared resource list", async () => {
+    listCatalogsMock.mockResolvedValue({
+      items: [{ ...catalog, operations: ["view_summary"] }],
       total: 1,
     });
+
     render(
       <MemoryRouter initialEntries={["/data-catalog/catalog/catalog-1"]}>
         <DataCatalogScene selection={{ id: "catalog-1", type: "catalog" }} suppressAutoSelect />
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(listCatalogResourcePageMock).toHaveBeenCalledWith({
-      catalogId: "catalog-1",
-      limit: 1,
-      offset: 0,
-    }));
-    expect((await screen.findByTestId("authorized-catalog-id")).textContent).toBe("catalog-1");
-    expect(screen.queryByText("Forbidden")).toBeNull();
-    expect(getCatalogMock).toHaveBeenCalledWith("catalog-1", { skipErrorToast: true });
+    expect((await screen.findByTestId("selected-catalog-id")).textContent).toBe("catalog-1");
+    expect(getCatalogMock).not.toHaveBeenCalled();
   });
 
   it("keeps the catalog error when no directly granted resource is available", async () => {
