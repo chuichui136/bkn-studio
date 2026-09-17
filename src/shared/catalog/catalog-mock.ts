@@ -20,7 +20,7 @@ export const MOCK_CATALOG_OPERATIONS = [
 let mockCatalogs: CatalogRecord[] = [
   {
     id: "cat-001",
-    internal: false,
+    builtin: false,
     name: "customer_master",
     description: "客户主数据连接，用于同步基础资料。",
     connectorType: "mariadb",
@@ -50,7 +50,7 @@ let mockCatalogs: CatalogRecord[] = [
   },
   {
     id: "cat-002",
-    internal: false,
+    builtin: false,
     name: "knowledge_index",
     description: "知识网络的全文检索索引。",
     connectorType: "opensearch",
@@ -79,7 +79,7 @@ let mockCatalogs: CatalogRecord[] = [
   },
   {
     id: "cat-003",
-    internal: false,
+    builtin: false,
     name: "finance_dw",
     description: "财务数仓只读连接。",
     connectorType: "postgresql",
@@ -110,7 +110,7 @@ let mockCatalogs: CatalogRecord[] = [
   },
   {
     id: "cat-006",
-    internal: false,
+    builtin: false,
     name: "ISSUE180_IV18007_PG17_orders_archive_20260915",
     description: "用于验收长名称目录在停用状态下的展示。",
     connectorType: "postgresql",
@@ -140,7 +140,7 @@ let mockCatalogs: CatalogRecord[] = [
   },
   {
     id: "cat-007",
-    internal: false,
+    builtin: false,
     name: "ISSUE180_IV18007_PG17_orders_current_20260915",
     description: "用于验收具有相同长前缀的数据目录名称。",
     connectorType: "postgresql",
@@ -170,7 +170,7 @@ let mockCatalogs: CatalogRecord[] = [
   },
   {
     id: "cat-008",
-    internal: false,
+    builtin: false,
     name: "permission_limited_catalog",
     description: "用于验收只有查看详情权限时的按钮显隐与各功能页权限提示。",
     connectorType: "postgresql",
@@ -200,7 +200,7 @@ let mockCatalogs: CatalogRecord[] = [
   },
   {
     id: "cat-009",
-    internal: false,
+    builtin: false,
     name: "summary_only_resource_catalog",
     description: "用于验收由 Resource 访问派生的目录摘要导航。",
     connectorType: "postgresql",
@@ -230,7 +230,7 @@ let mockCatalogs: CatalogRecord[] = [
   },
   {
     id: "adp_bkn_catalog",
-    internal: true,
+    builtin: true,
     name: "adp_bkn_catalog",
     description: "BKN的逻辑命名空间",
     connectorType: "",
@@ -254,7 +254,7 @@ let mockCatalogs: CatalogRecord[] = [
   },
   {
     id: "cat-005",
-    internal: true,
+    builtin: true,
     name: "openbkn_execution_factory",
     description: "执行工厂内置逻辑 Catalog。",
     connectorType: "",
