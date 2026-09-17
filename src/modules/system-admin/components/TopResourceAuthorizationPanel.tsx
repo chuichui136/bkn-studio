@@ -10,19 +10,24 @@ import {
   AppstoreOutlined,
   DatabaseOutlined,
   DeploymentUnitOutlined,
+  DownOutlined,
   FunctionOutlined,
+  RightOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
 import { Alert, Empty, Input, Select, Spin, Tag } from "antd";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useDebouncedValue } from "@/framework/hooks/use-debounced-value";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { TablePaginationBar } from "@/framework/ui/common/TablePaginationBar";
 import {
+  listTopResourceChildCategories,
   listTopLevelAuthzObjects,
+  listTopResourceChildren,
   TOP_LEVEL_AUTHZ_RESOURCE_TYPES,
+  type TopResourceChildPage,
   type TopResourceType,
 } from "@/modules/system-admin/services/authz-objects.service";
 import type { AuthorizableObject } from "@/modules/system-admin/types/authz";
@@ -48,7 +53,10 @@ const ICONS: Record<string, ReactNode> = {
 };
 
 const DEFAULT_PAGE_SIZE = 10;
-export function TopResourceAuthorizationPanel({ onManage }: TopResourceAuthorizationPanelProps) {
+const CHILD_PAGE_SIZE = 10;
+type ChildPageState = { page: number; pageSize: number };
+
+export function TopResourceAuthorizationPanel({ fineGrained, onManage }: TopResourceAuthorizationPanelProps) {
   const { t } = useTranslation();
   const [keyword, setKeyword] = useState("");
   const query = useDebouncedValue(keyword.trim(), 300);
@@ -59,6 +67,12 @@ export function TopResourceAuthorizationPanel({ onManage }: TopResourceAuthoriza
   const [rootTotal, setRootTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [children, setChildren] = useState<Record<string, TopResourceChildPage>>({});
+  const [childPages, setChildPages] = useState<Record<string, ChildPageState>>({});
+  const [loadingChildren, setLoadingChildren] = useState<Set<string>>(new Set());
+  const [childLoadErrors, setChildLoadErrors] = useState<Set<string>>(new Set());
+  const childRequestVersions = useRef(new Map<string, number>());
 
   useEffect(() => {
     let cancelled = false;
@@ -72,11 +86,60 @@ export function TopResourceAuthorizationPanel({ onManage }: TopResourceAuthoriza
         if (cancelled) return;
         setRoots(result.objects);
         setRootTotal(result.total);
+        setExpanded(new Set());
       })
       .catch(() => { if (!cancelled) setLoadError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [page, pageSize, query, resourceType]);
+
+  const loadChildPage = (root: AuthorizableObject, category: string, nextPage: ChildPageState) => {
+    const key = `${root.type}:${root.id}:${category}`;
+    const requestVersion = (childRequestVersions.current.get(key) ?? 0) + 1;
+    childRequestVersions.current.set(key, requestVersion);
+    setLoadingChildren((current) => new Set(current).add(key));
+    setChildLoadErrors((current) => {
+      const errors = new Set(current);
+      errors.delete(key);
+      return errors;
+    });
+    void listTopResourceChildren(root, category, {
+      limit: nextPage.pageSize,
+      offset: (nextPage.page - 1) * nextPage.pageSize,
+    })
+      .then((result) => {
+        if (childRequestVersions.current.get(key) !== requestVersion) return;
+        setChildren((current) => ({ ...current, [key]: result }));
+        setChildPages((current) => ({ ...current, [key]: nextPage }));
+      })
+      .catch(() => {
+        if (childRequestVersions.current.get(key) !== requestVersion) return;
+        setChildLoadErrors((current) => new Set(current).add(key));
+      })
+      .finally(() => setLoadingChildren((current) => {
+        if (childRequestVersions.current.get(key) !== requestVersion) return current;
+        const loading = new Set(current);
+        loading.delete(key);
+        return loading;
+      }));
+  };
+
+  const toggleRoot = (root: AuthorizableObject) => {
+    const key = `${root.type}:${root.id}`;
+    const next = new Set(expanded);
+    if (next.has(key)) {
+      next.delete(key);
+      setExpanded(next);
+      return;
+    }
+    next.add(key);
+    setExpanded(next);
+    for (const category of listTopResourceChildCategories(root)) {
+      const childKey = `${key}:${category}`;
+      if (children[childKey] || loadingChildren.has(childKey)) continue;
+      loadChildPage(root, category, { page: 1, pageSize: CHILD_PAGE_SIZE });
+    }
+  };
 
   return (
     <section className={styles.topResourceWorkbench}>
@@ -109,9 +172,17 @@ export function TopResourceAuthorizationPanel({ onManage }: TopResourceAuthoriza
       {loading ? <div className={styles.topResourceLoading}><Spin /></div> : null}
       {!loading && roots.length === 0 ? <Empty description={t("systemAdmin.objectGrants.empty")} image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       {!loading && roots.map((root) => {
+        const key = `${root.type}:${root.id}`;
+        const canExpand = fineGrained && listTopResourceChildCategories(root).length > 0;
+        const isExpanded = expanded.has(key);
         return (
           <article className={styles.topResourceRow} key={`${root.type}:${root.id}`}>
-            <span />
+            {canExpand ? <button
+              aria-label={t("systemAdmin.objectGrants.topResourceToggle", { name: root.name })}
+              className={styles.topResourceToggle}
+              onClick={() => toggleRoot(root)}
+              type="button"
+            >{isExpanded ? <DownOutlined /> : <RightOutlined />}</button> : <span />}
             <span className={styles.authzAvatar}>{ICONS[root.type] ?? <AppstoreOutlined />}</span>
             <div className={styles.topResourceName}>
               <strong>{root.name}</strong>
@@ -121,6 +192,42 @@ export function TopResourceAuthorizationPanel({ onManage }: TopResourceAuthoriza
             <AppButton onClick={() => onManage(root)} type="link">
               {t("systemAdmin.objectGrants.manage")}
             </AppButton>
+            {canExpand && isExpanded ? <div className={styles.topResourceChildren}>
+              {listTopResourceChildCategories(root).map((category) => {
+                const childKey = `${key}:${category}`;
+                const result = children[childKey];
+                const childPage = childPages[childKey] ?? { page: 1, pageSize: CHILD_PAGE_SIZE };
+                const failed = childLoadErrors.has(childKey);
+                const loadingChild = loadingChildren.has(childKey);
+                if (!result && !failed && loadingChild) return <div className={styles.topResourceLoading} key={category}><Spin size="small" /></div>;
+                if (!result && !failed) return null;
+                return <section className={styles.topResourceCategory} key={category}>
+                  <div className={styles.topResourceCategoryHead}><span>{resourceTypeLabel(category)}</span></div>
+                  {failed ? <Alert
+                    action={<AppButton onClick={() => loadChildPage(root, category, childPage)} type="link">{t("common.retry")}</AppButton>}
+                    message={t("systemAdmin.objectGrants.topResourceLoadError")}
+                    showIcon
+                    type="error"
+                  /> : null}
+                  {result?.children.map((child) => <div className={styles.topResourceChildRow} key={`${child.type}:${child.id}`}>
+                    <div><strong>{child.name}</strong><small>{child.sub}</small></div>
+                    <AppButton onClick={() => onManage(child)} type="link">{t("systemAdmin.objectGrants.manage")}</AppButton>
+                  </div>)}
+                  {result && result.total > 0 ? <TablePaginationBar
+                    current={childPage.page}
+                    onChange={(nextPage, nextPageSize) => loadChildPage(root, category, {
+                      page: nextPageSize === childPage.pageSize ? nextPage : 1,
+                      pageSize: nextPageSize,
+                    })}
+                    pageSize={childPage.pageSize}
+                    showSizeChanger
+                    showTotal={(count) => t("common.total", { total: count })}
+                    size="small"
+                    total={result.total}
+                  /> : null}
+                </section>;
+              })}
+            </div> : null}
           </article>
         );
       })}
