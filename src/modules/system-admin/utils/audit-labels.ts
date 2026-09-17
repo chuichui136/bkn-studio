@@ -33,4 +33,10 @@ export function auditActionToken(method: string, action: string): string {
   return ACTION_MAP[`${method} ${action}`] ?? "";
 }
 
-export const AUDIT_RESOURCES = ["users", "departments", "roles", "role-bindings"] as const;
+export const AUDIT_RESOURCES = [
+  "users",
+  "departments",
+  "roles",
+  "role-bindings",
+  "property-grants",
+] as const;

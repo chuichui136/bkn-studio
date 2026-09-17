@@ -842,7 +842,6 @@ export const systemAdminZhCN = {
         logId: "日志 ID",
         payload: "请求详情",
         noPayload: "无附加详情",
-        columnMasking: "列掩码",
       },
       columns: {
         time: "时间",

@@ -7,10 +7,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { auditActionToken } from "./audit-labels";
+import { AUDIT_RESOURCES, auditActionToken } from "./audit-labels";
 
 describe("auditActionToken", () => {
-  it("identifies property-grant updates for localized audit rendering", () => {
+  it("identifies property-grant updates and exposes their resource filter", () => {
     expect(auditActionToken("PATCH", "property-grants")).toBe("property_grants_update");
+    expect(AUDIT_RESOURCES).toContain("property-grants");
   });
 });

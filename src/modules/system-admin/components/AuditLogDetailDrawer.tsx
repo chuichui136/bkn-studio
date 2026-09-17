@@ -11,7 +11,6 @@ import { useTranslation } from "react-i18next";
 
 import type { AuditLog } from "@/modules/system-admin/types/admin";
 import { auditActionToken } from "@/modules/system-admin/utils/audit-labels";
-import { formatAuditDetailJson } from "@/modules/system-admin/utils/audit-detail";
 import { formatAuditTime } from "@/modules/system-admin/utils/audit-lookup-cache";
 
 import appStyles from "@/modules/system-admin/scenes/admin.module.css";
@@ -24,6 +23,17 @@ type AuditLogDetailDrawerProps = {
   open: boolean;
   targetLabel: (log: AuditLog) => string | undefined;
 };
+
+function formatDetailJson(detail?: string) {
+  if (!detail?.trim()) {
+    return "";
+  }
+  try {
+    return JSON.stringify(JSON.parse(detail), null, 2);
+  } catch {
+    return detail;
+  }
+}
 
 export function AuditLogDetailDrawer({
   actorLabel,
@@ -42,16 +52,7 @@ export function AuditLogDetailDrawer({
     return token ? t(`systemAdmin.audit.act.${token}`) : `${log.resource} · ${log.action}`;
   }, [log, t]);
 
-  const detailJson = useMemo(
-    () =>
-      formatAuditDetailJson(
-        log?.detail,
-        log?.resource === "property-grants"
-          ? t("systemAdmin.audit.detail.columnMasking")
-          : undefined,
-      ),
-    [log?.detail, log?.resource, t],
-  );
+  const detailJson = useMemo(() => formatDetailJson(log?.detail), [log?.detail]);
 
   if (!log) {
     return null;

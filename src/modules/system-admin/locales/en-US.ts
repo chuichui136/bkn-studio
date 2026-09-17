@@ -845,7 +845,6 @@ export const systemAdminEnUS = {
         logId: "Log ID",
         payload: "Request payload",
         noPayload: "No additional detail",
-        columnMasking: "Column Masking",
       },
       columns: {
         time: "Time",
