@@ -407,9 +407,10 @@ export async function importKnowledgeNetwork(
     const response = (
       error as { response?: { data?: { error_code?: string; description?: string } } }
     ).response?.data;
+    const { description, error_code: errorCode } = response ?? {};
 
-    if (KNOWLEDGE_NETWORK_IMPORT_CONFLICT_ERROR_CODES.has(response?.error_code ?? "")) {
-      throwImportConflict(response.description ?? i18n.t("knowledgeNetwork.importConflictTitle"));
+    if (KNOWLEDGE_NETWORK_IMPORT_CONFLICT_ERROR_CODES.has(errorCode ?? "")) {
+      throwImportConflict(description ?? i18n.t("knowledgeNetwork.importConflictTitle"));
     }
 
     throw error;
