@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 
 import type { AuditLog } from "@/modules/system-admin/types/admin";
 import { auditActionToken } from "@/modules/system-admin/utils/audit-labels";
+import { formatAuditDetailJson } from "@/modules/system-admin/utils/audit-detail";
 import { formatAuditTime } from "@/modules/system-admin/utils/audit-lookup-cache";
 
 import appStyles from "@/modules/system-admin/scenes/admin.module.css";
@@ -23,39 +24,6 @@ type AuditLogDetailDrawerProps = {
   open: boolean;
   targetLabel: (log: AuditLog) => string | undefined;
 };
-
-export function formatAuditDetailJson(detail?: string, columnMaskingLabel?: string) {
-  if (!detail?.trim()) {
-    return "";
-  }
-  try {
-    const parsed = JSON.parse(detail);
-    return JSON.stringify(
-      columnMaskingLabel ? localizePropertyGrantLevels(parsed, columnMaskingLabel) : parsed,
-      null,
-      2,
-    );
-  } catch {
-    return detail;
-  }
-}
-
-function localizePropertyGrantLevels(value: unknown, columnMaskingLabel: string): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => localizePropertyGrantLevels(item, columnMaskingLabel));
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, nestedValue]) => [
-      key,
-      key === "level" && nestedValue === "masked"
-        ? columnMaskingLabel
-        : localizePropertyGrantLevels(nestedValue, columnMaskingLabel),
-    ]),
-  );
-}
 
 export function AuditLogDetailDrawer({
   actorLabel,

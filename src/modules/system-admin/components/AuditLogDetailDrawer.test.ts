@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatAuditDetailJson } from "./AuditLogDetailDrawer";
+import { formatAuditDetailJson } from "../utils/audit-detail";
 
 describe("formatAuditDetailJson", () => {
   it("renders property-grant masked levels with the localized Column Masking label", () => {
