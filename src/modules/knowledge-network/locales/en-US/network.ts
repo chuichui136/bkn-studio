@@ -50,8 +50,17 @@ export const networkPart = {
       "Use lowercase letters, numbers, underscores, or hyphens. It must start with a letter or number.",
     identifierRequired: "Please enter a knowledge network ID.",
     importButton: "Import",
+    importBindingPolicyDescription:
+      "The file may reference data sources or tools outside this environment. Choose how to handle those bindings.",
+    importBindingPolicyDetachDescription:
+      "For migration to another environment. The network model is imported, but data sources, logic-property tools, action sources, and relation backing resources are cleared and must be configured again in the target environment.",
+    importBindingPolicyDetachTitle: "Detach bindings",
+    importBindingPolicyPreserveDescription:
+      "For restore in the same environment or a full clone with identical resource IDs. The original data-source, tool, and action-source bindings are retained; the import fails if any target binding is missing.",
+    importBindingPolicyPreserveTitle: "Preserve bindings",
+    importBindingPolicyTitle: "Choose how to handle external dependencies",
     importConflictTip:
-      "You can overwrite, ignore the conflict, or rename the network and import again.",
+      "You can overwrite the existing network, or change the name and ID to create a copy.",
     importConflictTitle: "Import conflict",
     conceptGroupIdExists: 'Concept group ID "{{id}}" already exists.',
     conceptGroupNameExists: 'Concept group name "{{name}}" already exists.',

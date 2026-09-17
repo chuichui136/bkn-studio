@@ -17,6 +17,7 @@ import {
 } from "@/framework/request/normalize";
 import type {
   KnowledgeNetworkExportFormat,
+  KnowledgeNetworkBindingPolicy,
   KnowledgeNetworkImportMode,
   KnowledgeNetworkListQuery,
   KnowledgeNetworkListResult,
@@ -70,6 +71,14 @@ const MOCK_KNOWLEDGE_NETWORK_OPERATIONS = [
   "authorize",
   "execute",
 ];
+
+const KNOWLEDGE_NETWORK_IMPORT_CONFLICT_ERROR_CODES = new Set([
+  "BknBackend.KnowledgeNetwork.KNIDExisted",
+  "BknBackend.KnowledgeNetwork.KNNameExisted",
+  // Keep recognizing responses from the legacy ontology manager during rollout.
+  "OntologyManager.KnowledgeNetwork.KNIDExisted",
+  "OntologyManager.KnowledgeNetwork.KNNameExisted",
+]);
 
 export async function listKnowledgeNetworks(
   query: KnowledgeNetworkListQuery,
@@ -328,6 +337,7 @@ export async function exportKnowledgeNetwork(
 export async function importKnowledgeNetwork(
   payload: Record<string, unknown>,
   importMode?: KnowledgeNetworkImportMode,
+  bindingPolicy: KnowledgeNetworkBindingPolicy = "preserve",
 ) {
   const requestBody = {
     ...payload,
@@ -388,6 +398,7 @@ export async function importKnowledgeNetwork(
   try {
     await http.post("/bkn-backend/v1/knowledge-networks", requestBody, {
       params: {
+        binding_policy: bindingPolicy,
         import_mode: importMode,
         validate_dependency: false,
       },
@@ -396,12 +407,10 @@ export async function importKnowledgeNetwork(
     const response = (
       error as { response?: { data?: { error_code?: string; description?: string } } }
     ).response?.data;
+    const { description, error_code: errorCode } = response ?? {};
 
-    if (
-      response?.error_code === "OntologyManager.KnowledgeNetwork.KNIDExisted" ||
-      response?.error_code === "OntologyManager.KnowledgeNetwork.KNNameExisted"
-    ) {
-      throwImportConflict(response.description ?? i18n.t("knowledgeNetwork.importConflictTitle"));
+    if (KNOWLEDGE_NETWORK_IMPORT_CONFLICT_ERROR_CODES.has(errorCode ?? "")) {
+      throwImportConflict(description ?? i18n.t("knowledgeNetwork.importConflictTitle"));
     }
 
     throw error;

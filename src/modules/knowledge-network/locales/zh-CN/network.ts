@@ -48,7 +48,16 @@ export const networkPart = {
     identifierPattern: "仅支持小写字母、数字、下划线和连字符，且需以小写字母或数字开头。",
     identifierRequired: "请输入知识网络 ID。",
     importButton: "导入",
-    importConflictTip: "你可以选择覆盖、忽略冲突，或修改名称和 ID 后重新导入。",
+    importBindingPolicyDescription:
+      "导入文件可能引用当前环境之外的数据源或工具。请选择如何处理这些绑定。",
+    importBindingPolicyDetachDescription:
+      "适用于跨环境迁移。导入模型结构，但清空数据源、逻辑属性工具、行动执行源和关系后端资源；导入后需在目标环境重新配置。",
+    importBindingPolicyDetachTitle: "脱离绑定",
+    importBindingPolicyPreserveDescription:
+      "适用于同一环境恢复或资源 ID 完全一致的全量克隆。保留原数据源、工具和行动执行来源；目标环境缺少任一绑定时，导入会失败。",
+    importBindingPolicyPreserveTitle: "保留绑定",
+    importBindingPolicyTitle: "选择外部依赖处理方式",
+    importConflictTip: "你可以覆盖现有知识网络，或修改名称和 ID 后新建副本。",
     importConflictTitle: "导入冲突",
     conceptGroupIdExists: "概念分组 ID「{{id}}」已存在。",
     conceptGroupNameExists: "概念分组名称「{{name}}」已存在。",
