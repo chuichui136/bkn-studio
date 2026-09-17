@@ -100,6 +100,26 @@ describe("object-type-logic-property-trial.service", () => {
     ]);
   });
 
+  it("forwards explicit function inputs to the ontology-query property endpoint", async () => {
+    const { getObjectTypeLogicPropertyValues } = await import(
+      "@/modules/knowledge-network/services/object-type-logic-property-trial.service"
+    );
+
+    await getObjectTypeLogicPropertyValues({
+      dynamicParams: { discount: { rate: 0.8 } },
+      instanceIdentities: [{ order_id: "1001" }],
+      logicProperties: [toolProperty],
+      networkId: "kn-1",
+      objectTypeId: "ot-1",
+    });
+
+    const [, body] = postMock.mock.calls[0] as unknown as [
+      string,
+      { dynamic_params?: Record<string, Record<string, number>> },
+    ];
+    expect(body.dynamic_params).toEqual({ discount: { rate: 0.8 } });
+  });
+
   it("rejects a response that cannot be mapped to every selected instance", async () => {
     postMock.mockResolvedValueOnce({ data: { datas: [] } });
 
