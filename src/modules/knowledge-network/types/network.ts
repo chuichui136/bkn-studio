@@ -96,6 +96,12 @@ export type KnowledgeNetworkPreviewGraph = {
 export type KnowledgeNetworkImportMode = "ignore" | "overwrite";
 
 /**
+ * How an imported network handles bindings to environment-local resources.
+ * Preserve is for restoring into the same environment; detach is for migration.
+ */
+export type KnowledgeNetworkBindingPolicy = "detach" | "preserve";
+
+/**
  * "json" downloads the backend's export view as a single JSON document.
  * "bkn" downloads the BKN tar package defined by the BKN specification, which
  * also carries the capability dependency section the JSON view leaves out.
