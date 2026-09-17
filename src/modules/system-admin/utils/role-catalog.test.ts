@@ -29,6 +29,7 @@ describe("role-catalog", () => {
   });
 
   it("recognizes old system display names as default role aliases", () => {
+    expect(resolveBuiltinRoleKey({ name: "admin", builtin: false })).toBe("admin");
     expect(resolveBuiltinRoleKey({ name: "系统管理员", builtin: true })).toBe("admin");
     expect(resolveBuiltinRoleKey({ name: "安全管理员", builtin: true })).toBe("security");
     expect(resolveBuiltinRoleKey({ name: "审计管理员", builtin: true })).toBe("audit");
