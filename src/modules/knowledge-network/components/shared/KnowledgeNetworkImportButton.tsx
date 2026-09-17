@@ -34,6 +34,12 @@ type KnowledgeNetworkImportButtonProps = {
 type ImportPayload = Record<string, unknown>;
 type ImportSubmitAction = "create" | "import" | "overwrite";
 
+function isKnowledgeNetworkBindingPolicy(
+  value: unknown,
+): value is KnowledgeNetworkBindingPolicy {
+  return value === "detach" || value === "preserve";
+}
+
 export function KnowledgeNetworkImportButton({
   className,
   onImported,
@@ -121,6 +127,7 @@ export function KnowledgeNetworkImportButton({
 
       <Modal
         closable={!isSubmitting}
+        cancelButtonProps={{ disabled: isSubmitting }}
         confirmLoading={submittingAction === "import"}
         destroyOnClose
         footer={
@@ -189,7 +196,13 @@ export function KnowledgeNetworkImportButton({
         </Typography.Paragraph>
         <Radio.Group
           disabled={isSubmitting}
-          onChange={(event) => setBindingPolicy(event.target.value)}
+          onChange={(event) => {
+            const nextBindingPolicy: unknown = event.target.value;
+
+            if (isKnowledgeNetworkBindingPolicy(nextBindingPolicy)) {
+              setBindingPolicy(nextBindingPolicy);
+            }
+          }}
           value={bindingPolicy}
         >
           <Space direction="vertical" size="middle">

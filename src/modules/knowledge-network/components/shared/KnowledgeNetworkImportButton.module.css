@@ -7,6 +7,6 @@
 
 .bindingOptionDescription {
   margin: 4px 0 0 !important;
-  color: #475569 !important;
+  color: var(--color-text-secondary);
   line-height: 22px;
 }

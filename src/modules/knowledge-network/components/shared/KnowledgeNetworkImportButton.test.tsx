@@ -43,7 +43,24 @@ vi.mock("antd", () => {
       {children}
     </label>
   );
-  Radio.Group = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  Radio.Group = ({
+    children,
+    onChange,
+    value,
+  }: {
+    children?: ReactNode;
+    onChange?: (event: { target: { value: string } }) => void;
+    value?: string;
+  }) => (
+    <div
+      data-value={value}
+      onChange={(event) =>
+        onChange?.({ target: { value: (event.target as HTMLInputElement).value } })
+      }
+    >
+      {children}
+    </div>
+  );
 
   return {
     Alert: ({ description }: { description?: ReactNode }) => <div>{description}</div>,
@@ -170,6 +187,7 @@ describe("KnowledgeNetworkImportButton", () => {
     expect(
       within(dialog).getByText("knowledgeNetwork.importBindingPolicyDescription"),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByDisplayValue("detach"));
     fireEvent.click(
       within(dialog).getByRole("button", { name: "knowledgeNetwork.importButton" }),
     );
@@ -184,7 +202,7 @@ describe("KnowledgeNetworkImportButton", () => {
       expect(mocks.importKnowledgeNetwork).toHaveBeenCalledWith(
         { id: "orders", name: "Orders" },
         undefined,
-        "preserve",
+        "detach",
       );
     });
   });
