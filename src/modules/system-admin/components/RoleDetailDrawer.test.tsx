@@ -46,8 +46,16 @@ function role(builtin: boolean): AdminRole {
   };
 }
 
-function renderDrawer(builtin: boolean) {
-  return render(<RoleDetailDrawer onClose={vi.fn()} open role={role(builtin)} />);
+function renderDrawer(builtin: boolean, canManageMembers?: boolean) {
+  return render(
+    <RoleDetailDrawer
+      canManageMembers={canManageMembers}
+      onClose={vi.fn()}
+      onOpenMembers={vi.fn()}
+      open
+      role={role(builtin)}
+    />,
+  );
 }
 
 afterEach(() => {
@@ -69,5 +77,19 @@ describe("RoleDetailDrawer role type label", () => {
     renderDrawer(false);
     expect(screen.getByText(customLabel)).toBeTruthy();
     expect(screen.queryByText("common.custom")).toBeNull();
+  });
+});
+
+describe("RoleDetailDrawer member management permission", () => {
+  it("hides the member-management entry without admin-role:members", () => {
+    renderDrawer(true, false);
+
+    expect(screen.queryByText("systemAdmin.roles.actions.members")).toBeNull();
+  });
+
+  it("shows the member-management entry with admin-role:members", () => {
+    renderDrawer(true, true);
+
+    expect(screen.getByText("systemAdmin.roles.actions.members")).toBeTruthy();
   });
 });
