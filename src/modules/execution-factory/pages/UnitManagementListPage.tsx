@@ -31,13 +31,14 @@ export function UnitManagementListPage() {
     const permissions = runtimeConfig.currentUser.permissions;
     const hasFunctionCreate = permissions.includes("execution-factory:function:create");
     const hasToolboxCreate = permissions.includes("execution-factory:toolbox:create");
-    const activeTab = hasFunctionCreate || hasToolboxCreate
-      ? "toolbox"
-      : permissions.includes("execution-factory:mcp:create")
-        ? "mcp"
-        : permissions.includes("execution-factory:skill:create")
-          ? "skill"
-          : "operator";
+    const activeTab =
+      hasFunctionCreate || hasToolboxCreate
+        ? "toolbox"
+        : permissions.includes("execution-factory:mcp:create")
+          ? "mcp"
+          : permissions.includes("execution-factory:skill:create")
+            ? "skill"
+            : "operator";
 
     return (
       <Empty description={t("executionFactory.createOnlyDescription")} style={{ marginTop: 96 }}>

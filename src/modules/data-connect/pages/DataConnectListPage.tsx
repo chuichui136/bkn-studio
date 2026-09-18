@@ -25,7 +25,9 @@ export function DataConnectListPage() {
   const permissions = runtimeConfig.currentUser.permissions;
   // A resource-level view grant lets the backend expose the containing catalog as a
   // summary-only row. Let that caller mount the list; row operations remain backend-derived.
-  const canView = DATA_CONNECT_VIEW_PERMISSIONS.some((permission) => permissions.includes(permission));
+  const canView = DATA_CONNECT_VIEW_PERMISSIONS.some((permission) =>
+    permissions.includes(permission),
+  );
   const canCreate = permissions.includes(DATA_CONNECT_CREATE_PERMISSION);
 
   if (!canView && !canCreate) {

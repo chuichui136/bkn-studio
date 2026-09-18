@@ -77,7 +77,9 @@ describe("DataCatalogPage", () => {
 
     render(
       <MemoryRouter initialEntries={["/data-catalog"]}>
-        <Routes><Route element={<DataCatalogPage />} path="/data-catalog" /></Routes>
+        <Routes>
+          <Route element={<DataCatalogPage />} path="/data-catalog" />
+        </Routes>
       </MemoryRouter>,
     );
 
@@ -85,20 +87,21 @@ describe("DataCatalogPage", () => {
     expect(state.sceneMount).not.toHaveBeenCalled();
   });
 
-  it.each([
-    "catalog:modify",
-    "catalog:task_manage",
-    "catalog:resource_manage",
-  ])("keeps the catalog explorer available for %s", async (permission) => {
-    state.permissions = [permission];
+  it.each(["catalog:modify", "catalog:task_manage", "catalog:resource_manage"])(
+    "keeps the catalog explorer available for %s",
+    async (permission) => {
+      state.permissions = [permission];
 
-    render(
-      <MemoryRouter initialEntries={["/data-catalog"]}>
-        <Routes><Route element={<DataCatalogPage />} path="/data-catalog" /></Routes>
-      </MemoryRouter>,
-    );
+      render(
+        <MemoryRouter initialEntries={["/data-catalog"]}>
+          <Routes>
+            <Route element={<DataCatalogPage />} path="/data-catalog" />
+          </Routes>
+        </MemoryRouter>,
+      );
 
-    await waitFor(() => expect(state.sceneMount).toHaveBeenCalledOnce());
-    expect(screen.queryByText("common.noPermission")).toBeNull();
-  });
+      await waitFor(() => expect(state.sceneMount).toHaveBeenCalledOnce());
+      expect(screen.queryByText("common.noPermission")).toBeNull();
+    },
+  );
 });

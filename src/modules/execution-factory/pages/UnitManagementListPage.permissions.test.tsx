@@ -12,7 +12,9 @@ import { UnitManagementListPage } from "./UnitManagementListPage";
 
 const runtimeConfig = vi.hoisted(() => ({ currentUser: { permissions: [] as string[] } }));
 
-vi.mock("@/framework/context/use-runtime-config", () => ({ useRuntimeConfig: () => runtimeConfig }));
+vi.mock("@/framework/context/use-runtime-config", () => ({
+  useRuntimeConfig: () => runtimeConfig,
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/modules/execution-factory/components/create-menu/CreateMenu", () => ({
   CreateMenu: ({ activeTab, toolboxView }: { activeTab: string; toolboxView?: string }) => (
@@ -33,14 +35,17 @@ describe("UnitManagementListPage create-only access", () => {
     ["Toolbox", "execution-factory:toolbox:create", "toolbox", "openapi"],
     ["MCP", "execution-factory:mcp:create", "mcp", undefined],
     ["Skill", "execution-factory:skill:create", "skill", undefined],
-  ])("renders a neutral creation entry for a %s-only role", (_name, permission, tab, toolboxView) => {
-    runtimeConfig.currentUser.permissions = [permission];
-    render(<UnitManagementListPage />);
+  ])(
+    "renders a neutral creation entry for a %s-only role",
+    (_name, permission, tab, toolboxView) => {
+      runtimeConfig.currentUser.permissions = [permission];
+      render(<UnitManagementListPage />);
 
-    const menu = screen.getByTestId("create-menu");
-    expect(menu.dataset.tab).toBe(tab);
-    expect(menu.dataset.toolboxView || undefined).toBe(toolboxView);
-    expect(screen.getByText("executionFactory.createOnlyDescription")).toBeTruthy();
-    expect(screen.queryByTestId("list-scene")).toBeNull();
-  });
+      const menu = screen.getByTestId("create-menu");
+      expect(menu.dataset.tab).toBe(tab);
+      expect(menu.dataset.toolboxView || undefined).toBe(toolboxView);
+      expect(screen.getByText("executionFactory.createOnlyDescription")).toBeTruthy();
+      expect(screen.queryByTestId("list-scene")).toBeNull();
+    },
+  );
 });

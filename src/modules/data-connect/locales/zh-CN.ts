@@ -19,8 +19,7 @@ export const dataConnectZhCN = {
     connectorTypeFilterPlaceholder: "按连接器类型筛选",
     toolbarHint: "当前模块已接入 Vega 后端的 catalogs 和 connector-types，表单流已经打通。",
     empty: "暂无数据连接",
-    emptyDescription:
-      "当前还没有可展示的数据连接记录，可以直接新建第一条连接实例。",
+    emptyDescription: "当前还没有可展示的数据连接记录，可以直接新建第一条连接实例。",
     createOnlyDescription: "你可以新建数据连接。",
     moreActions: "更多操作",
     detailTitle: "连接详情",

@@ -13,7 +13,9 @@ import { DataConnectListPage } from "./DataConnectListPage";
 const runtimeConfig = vi.hoisted(() => ({ currentUser: { permissions: [] as string[] } }));
 const navigate = vi.hoisted(() => vi.fn());
 
-vi.mock("@/framework/context/use-runtime-config", () => ({ useRuntimeConfig: () => runtimeConfig }));
+vi.mock("@/framework/context/use-runtime-config", () => ({
+  useRuntimeConfig: () => runtimeConfig,
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
 vi.mock("@/modules/data-connect/scenes/DataConnectListScene", () => ({
@@ -42,10 +44,13 @@ describe("DataConnectListPage permissions", () => {
     expect(screen.queryByTestId("data-connect-list")).toBeNull();
   });
 
-  it.each(["catalog:view_detail", "resource:view_detail"])("mounts the list for %s access", (permission) => {
-    runtimeConfig.currentUser.permissions = [permission];
-    render(<DataConnectListPage />);
+  it.each(["catalog:view_detail", "resource:view_detail"])(
+    "mounts the list for %s access",
+    (permission) => {
+      runtimeConfig.currentUser.permissions = [permission];
+      render(<DataConnectListPage />);
 
-    expect(screen.getByTestId("data-connect-list")).toBeTruthy();
-  });
+      expect(screen.getByTestId("data-connect-list")).toBeTruthy();
+    },
+  );
 });

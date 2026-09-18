@@ -50,18 +50,17 @@ export function filterAccessibleExecutionUnitTabs(
  * mount without at least one readable resource type. Otherwise the scene has no resolvable tab
  * and would fall through to the Skill API with an undefined active tab.
  */
-export function canAccessExecutionUnitManagement(
-  currentPermissions: readonly string[],
-): boolean {
-  return [...executionFactoryViewPermissions, ...executionFactoryCreatePermissions]
-    .some((permission) => currentPermissions.includes(permission));
+export function canAccessExecutionUnitManagement(currentPermissions: readonly string[]): boolean {
+  return [...executionFactoryViewPermissions, ...executionFactoryCreatePermissions].some(
+    (permission) => currentPermissions.includes(permission),
+  );
 }
 
 /** Whether it is safe to mount a list scene, which issues resource-list requests. */
-export function canViewExecutionUnitManagement(
-  currentPermissions: readonly string[],
-): boolean {
-  return executionFactoryViewPermissions.some((permission) => currentPermissions.includes(permission));
+export function canViewExecutionUnitManagement(currentPermissions: readonly string[]): boolean {
+  return executionFactoryViewPermissions.some((permission) =>
+    currentPermissions.includes(permission),
+  );
 }
 
 export type ToolboxView = "openapi" | "function";
