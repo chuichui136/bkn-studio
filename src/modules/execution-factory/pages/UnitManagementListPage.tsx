@@ -40,10 +40,12 @@ export function UnitManagementListPage() {
           : "operator";
 
     return (
-      <Empty description={t("executionFactory.emptyByTab.toolbox")} style={{ marginTop: 96 }}>
+      <Empty description={t("executionFactory.createOnlyDescription")} style={{ marginTop: 96 }}>
         <CreateMenu
           activeTab={activeTab}
-          toolboxView={hasFunctionCreate ? "function" : "openapi"}
+          {...(activeTab === "toolbox"
+            ? { toolboxView: hasFunctionCreate ? "function" : "openapi" }
+            : {})}
           variant="empty"
         />
       </Empty>

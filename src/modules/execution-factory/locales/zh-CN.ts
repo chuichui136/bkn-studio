@@ -213,6 +213,7 @@ export const executionFactoryZhCN = {
       "与能力管理相同的列表视图；数据来自市场目录。可按分类筛选，已引入当前平台的会标记「已引入」，可引入或同步最新版本。",
     empty: "暂无执行单元",
     emptyDescription: "当前还没有可展示的函数。",
+    createOnlyDescription: "你可以创建新的执行能力。",
     catalogEmpty: "暂无市场执行单元",
     catalogEmptyDescription: "市场视图中暂无可用的函数。",
     emptyByTab: {
