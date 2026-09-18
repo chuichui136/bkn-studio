@@ -57,6 +57,7 @@ export const networkPart = {
     "适用于同一环境恢复或资源 ID 完全一致的全量克隆。保留原数据源、工具和行动执行来源；目标环境缺少任一绑定时，导入会失败。",
   importBindingPolicyPreserveTitle: "保留绑定",
   importBindingPolicyTitle: "选择外部依赖处理方式",
+  importBindingInvalidTitle: "导入绑定不完整",
   importConflictTip: "你可以覆盖现有知识网络，或修改名称和 ID 后新建副本。",
   importConflictTitle: "导入冲突",
   conceptGroupIdExists: "概念分组 ID「{{id}}」已存在。",

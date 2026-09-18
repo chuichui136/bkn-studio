@@ -40,6 +40,7 @@ describe("importKnowledgeNetwork", () => {
           import_mode: undefined,
           validate_dependency: false,
         },
+        skipErrorToast: true,
       },
     );
   });
@@ -59,6 +60,7 @@ describe("importKnowledgeNetwork", () => {
           import_mode: "overwrite",
           validate_dependency: false,
         },
+        skipErrorToast: true,
       },
     );
   });
@@ -82,6 +84,27 @@ describe("importKnowledgeNetwork", () => {
 
     await expect(importKnowledgeNetwork({ id: "orders" })).rejects.toMatchObject({
       isConflict: true,
+    });
+  });
+
+  it("turns an incomplete preserved binding into an actionable import error", async () => {
+    postMock.mockRejectedValue({
+      response: {
+        data: {
+          description: "The knowledge network has incomplete tool bindings",
+          error_code: "BknBackend.KnowledgeNetwork.Proxy.TargetInvalid",
+          error_details: "toolbox orders-api is missing bound tools: get-order",
+          solution: "Restore the missing tool or import with detached bindings.",
+        },
+      },
+    });
+    const { importKnowledgeNetwork } =
+      await import("@/modules/knowledge-network/services/network.service");
+
+    await expect(importKnowledgeNetwork({ id: "orders" })).rejects.toMatchObject({
+      isBindingError: true,
+      message: "The knowledge network has incomplete tool bindings",
+      details: "toolbox orders-api is missing bound tools: get-order",
     });
   });
 });

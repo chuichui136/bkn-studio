@@ -22,6 +22,19 @@ export class KnowledgeNetworkImportConflictError extends Error {
   }
 }
 
+export class KnowledgeNetworkImportBindingError extends Error {
+  readonly isBindingError = true as const;
+
+  constructor(
+    message: string,
+    readonly details?: string,
+    readonly solution?: string,
+  ) {
+    super(message);
+    this.name = "KnowledgeNetworkImportBindingError";
+  }
+}
+
 export function stringFromUnknown(value: unknown, fallback = ""): string {
   if (typeof value === "string") {
     return value;

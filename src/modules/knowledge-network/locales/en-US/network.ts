@@ -58,6 +58,7 @@ export const networkPart = {
     "For restore in the same environment or a full clone with identical resource IDs. The original data-source, tool, and action-source bindings are retained; the import fails if any target binding is missing.",
   importBindingPolicyPreserveTitle: "Preserve bindings",
   importBindingPolicyTitle: "Choose how to handle external dependencies",
+  importBindingInvalidTitle: "Import bindings are incomplete",
   importConflictTip:
     "You can overwrite the existing network, or change the name and ID to create a copy.",
   importConflictTitle: "Import conflict",
