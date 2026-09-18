@@ -16,3 +16,6 @@ export const dataCatalogResourceManagePermission = "catalog:resource_manage" as 
 
 /** Permissions that allow the caller to open a catalog detail. */
 export const catalogDetailPermissions = ["catalog:view_detail", "resource:view_detail"];
+
+/** Grants that let a user enter the catalog workspace. Listing remains backend-filtered by object grants. */
+export const dataCatalogAccessPermissions = [...catalogDetailPermissions, "catalog:create"];

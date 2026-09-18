@@ -22,6 +22,7 @@ export const dataConnectZhCN = {
     empty: "暂无数据连接",
     emptyDescription:
       "当前还没有可展示的数据连接记录，可以直接新建第一条连接实例。",
+    createOnlyDescription: "你可以新建数据连接。",
     moreActions: "更多操作",
     detailTitle: "连接详情",
     name: "连接名称",

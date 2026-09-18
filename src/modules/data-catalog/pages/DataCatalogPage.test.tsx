@@ -9,17 +9,21 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const sceneMountMock = vi.hoisted(() => vi.fn());
+const state = vi.hoisted(() => ({
+  permissions: ["catalog:view_detail"] as string[],
+  sceneMount: vi.fn(),
+}));
 
 vi.mock("@/framework/context/use-runtime-config", () => ({
-  useRuntimeConfig: () => ({ currentUser: { permissions: ["catalog:view_detail"] } }),
+  useRuntimeConfig: () => ({ currentUser: { permissions: state.permissions } }),
 }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/modules/data-catalog/scenes/DataCatalogScene", async () => {
   const { useEffect } = await import("react");
   return {
     DataCatalogScene: ({ selection }: { selection: { id: string } | null }) => {
       useEffect(() => {
-        sceneMountMock();
+        state.sceneMount();
       }, []);
       return <output data-testid="selection">{selection?.id ?? "none"}</output>;
     },
@@ -36,6 +40,7 @@ function OpenCatalogButton() {
 describe("DataCatalogPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.permissions = ["catalog:view_detail"];
   });
 
   it("keeps the explorer mounted when the catalog route changes", async () => {
@@ -51,10 +56,23 @@ describe("DataCatalogPage", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(sceneMountMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(state.sceneMount).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: "open catalog" }));
 
     expect(await screen.findByText("catalog-1")).toBeTruthy();
-    expect(sceneMountMock).toHaveBeenCalledTimes(1);
+    expect(state.sceneMount).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mount the catalog explorer without catalog access", () => {
+    state.permissions = [];
+
+    render(
+      <MemoryRouter initialEntries={["/data-catalog"]}>
+        <Routes><Route element={<DataCatalogPage />} path="/data-catalog" /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("common.noPermission")).toBeTruthy();
+    expect(state.sceneMount).not.toHaveBeenCalled();
   });
 });
