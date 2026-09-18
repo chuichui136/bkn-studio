@@ -87,7 +87,6 @@ export function KnowledgeNetworkImportButton({
       }
 
       if (error instanceof KnowledgeNetworkImportBindingError) {
-        setConflictMessage(null);
         setBindingError(error);
         return;
       }
@@ -240,8 +239,12 @@ export function KnowledgeNetworkImportButton({
             description={
               <Space direction="vertical" size={4}>
                 <Typography.Text strong>{bindingError.message}</Typography.Text>
-                {bindingError.details ? <Typography.Text>{bindingError.details}</Typography.Text> : null}
-                {bindingError.solution ? <Typography.Text>{bindingError.solution}</Typography.Text> : null}
+                {bindingError.details ? (
+                  <Typography.Text>{bindingError.details}</Typography.Text>
+                ) : null}
+                {bindingError.solution ? (
+                  <Typography.Text>{bindingError.solution}</Typography.Text>
+                ) : null}
               </Space>
             }
             showIcon

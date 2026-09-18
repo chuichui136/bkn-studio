@@ -266,7 +266,9 @@ describe("KnowledgeNetworkImportButton", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "knowledgeNetwork.importButton" }));
 
     await screen.findByText("Import bindings are incomplete");
-    expect(screen.getByText("toolbox orders-api is missing bound tools: get-order")).toBeInTheDocument();
+    expect(
+      screen.getByText("toolbox orders-api is missing bound tools: get-order"),
+    ).toBeInTheDocument();
     expect(mocks.messageError).not.toHaveBeenCalled();
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
@@ -289,10 +291,12 @@ describe("KnowledgeNetworkImportButton", () => {
     await screen.findByText("Knowledge network ID already exists.");
 
     expect(screen.queryByText("Import bindings are incomplete")).not.toBeInTheDocument();
-    expect(screen.queryByText("toolbox orders-api is missing bound tools: get-order")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("toolbox orders-api is missing bound tools: get-order"),
+    ).not.toBeInTheDocument();
   });
 
-  it("replaces a conflict with a binding error from a conflict action", async () => {
+  it("keeps a conflict form when a conflict action finds incomplete bindings", async () => {
     render(<KnowledgeNetworkImportButton onImported={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "upload-file" }));
 
@@ -306,7 +310,7 @@ describe("KnowledgeNetworkImportButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "knowledgeNetwork.importOverwrite" }));
     await screen.findByText("Import bindings are incomplete");
 
-    expect(screen.queryByText("Knowledge network ID already exists.")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "common.create" })).not.toBeInTheDocument();
+    expect(screen.getByText("Knowledge network ID already exists.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "common.create" })).toBeInTheDocument();
   });
 });
