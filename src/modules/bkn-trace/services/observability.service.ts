@@ -101,7 +101,7 @@ export type TraceEvidenceServiceStatus = {
 export type TraceEvidenceConfiguration = {
   desiredEnabled: boolean;
   effectiveEnabled: boolean;
-  operation?: { id: string; phase: string };
+  operation?: { error?: string; id: string; phase: string };
   revision: number;
   services: TraceEvidenceServiceStatus[];
 };
@@ -276,7 +276,7 @@ export async function updateTraceEvidenceConfiguration(
 type BackendTraceEvidenceConfiguration = {
   desired_enabled: boolean;
   effective_enabled: boolean;
-  operation?: { id: string; phase: string };
+  operation?: { error?: string; id: string; phase: string };
   revision: number;
   services: Array<{
     applied_revision: number;

@@ -39,6 +39,8 @@ describe("bkn-trace service", () => {
 		log_sensitive_fields: false,
 		log_export: false,
 		log_policy_read: false,
+        trace_evidence_configuration_read: true,
+        trace_evidence_configuration_write: false,
         access_scope_fingerprint: "sha256:scope-a",
       },
     });
@@ -59,6 +61,8 @@ describe("bkn-trace service", () => {
 		logSensitiveFields: false,
 		logExport: false,
 		logPolicyRead: false,
+      traceEvidenceConfigurationRead: true,
+      traceEvidenceConfigurationWrite: false,
       managementAudit: false,
       securityAudit: false,
       technicalTrace: false,

@@ -5,9 +5,9 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { Alert, Spin, Switch, Table, Tag, Typography } from "antd";
+import { Alert, Modal, Spin, Switch, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import styles from "@/modules/bkn-trace/scenes/ObservabilityWorkspace.module.css";
@@ -16,6 +16,7 @@ import { getAccessProfile } from "@/modules/bkn-trace/services/trace.service";
 
 export function ObservabilitySettingsScene() {
   const { t } = useTranslation();
+  const mounted = useRef(true);
   const [sources, setSources] = useState<LogSourceStatus[]>([]);
   const [policies, setPolicies] = useState<LogPolicy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,11 +25,18 @@ export function ObservabilitySettingsScene() {
   const [traceEvidence, setTraceEvidence] = useState<TraceEvidenceConfiguration>();
   const [traceEvidenceWrite, setTraceEvidenceWrite] = useState(false);
   const [updatingTraceEvidence, setUpdatingTraceEvidence] = useState(false);
+  const [pendingTraceEvidence, setPendingTraceEvidence] = useState<boolean>();
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
     getAccessProfile().then(async (profile) => {
-		setTraceEvidenceWrite(Boolean(profile.traceEvidenceConfigurationWrite));
+      if (!active) return;
+      setTraceEvidenceWrite(Boolean(profile.traceEvidenceConfigurationWrite));
       if (!profile.globalLogSearch && !profile.logPolicyRead && !profile.traceEvidenceConfigurationRead) {
         if (active) { setDenied(true); setLoading(false); }
         return;
@@ -50,15 +58,36 @@ export function ObservabilitySettingsScene() {
     return () => { active = false; };
   }, [t]);
 
+  const operationActive = traceEvidence?.operation ? ["pending", "rolling_out", "rolling_back"].includes(traceEvidence.operation.phase) : false;
+  const operationFailed = traceEvidence?.operation ? ["failed", "rollback_failed"].includes(traceEvidence.operation.phase) : false;
+
+  useEffect(() => {
+    if (!operationActive) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      getTraceEvidenceConfiguration().then((configuration) => {
+        if (active) setTraceEvidence(configuration);
+      }).catch(() => undefined);
+    }, 1500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [operationActive]);
+
   const updateTraceEvidence = async (enabled: boolean) => {
     if (!traceEvidence) return;
     setUpdatingTraceEvidence(true);
     try {
-      setTraceEvidence(await updateTraceEvidenceConfiguration(enabled, traceEvidence.revision));
+      const configuration = await updateTraceEvidenceConfiguration(enabled, traceEvidence.revision);
+      if (mounted.current) setTraceEvidence(configuration);
     } catch {
-      setError(t("bknTrace.errors.queryFailed"));
+      try {
+        const configuration = await getTraceEvidenceConfiguration();
+        if (mounted.current) setTraceEvidence(configuration);
+      } catch {
+        // Preserve the last known state when the recovery read is unavailable.
+      }
+      if (mounted.current) setError(t("bknTrace.errors.traceEvidenceUpdateFailed"));
     } finally {
-      setUpdatingTraceEvidence(false);
+      if (mounted.current) setUpdatingTraceEvidence(false);
     }
   };
 
@@ -80,7 +109,8 @@ export function ObservabilitySettingsScene() {
   return <div className={styles.workspace}>
     <header className={styles.header}><div><Typography.Title level={3}>{t("bknTrace.settings.title")}</Typography.Title><Typography.Text type="secondary">{t("bknTrace.settings.description")}</Typography.Text></div></header>
     <Alert message={t("bknTrace.settings.readOnlyNotice")} showIcon type="info" />
-    {traceEvidence ? <section className={styles.section}><Typography.Title level={4}>{t("bknTrace.settings.traceEvidence")}</Typography.Title><Typography.Text>{traceEvidence.operation ? t("bknTrace.settings.traceEvidenceOperation", { phase: traceEvidence.operation.phase }) : traceEvidence.effectiveEnabled ? t("bknTrace.settings.traceEvidenceEnabled") : t("bknTrace.settings.traceEvidenceDisabled")}</Typography.Text>{traceEvidenceWrite ? <Switch checked={traceEvidence.desiredEnabled} disabled={updatingTraceEvidence || Boolean(traceEvidence.operation)} onChange={updateTraceEvidence} /> : null}<Typography.Paragraph type="secondary">{t("bknTrace.settings.traceEvidenceRevision", { revision: traceEvidence.revision })}</Typography.Paragraph>{traceEvidence.services.map((service) => <Typography.Paragraph key={service.name}>{service.name}: {service.phase} ({service.readyReplicas}/{service.requiredReplicas})</Typography.Paragraph>)}</section> : null}
+    {traceEvidence ? <section className={styles.section}><Typography.Title level={4}>{t("bknTrace.settings.traceEvidence")}</Typography.Title><Typography.Text>{operationActive ? t("bknTrace.settings.traceEvidenceOperation", { phase: traceEvidence.operation?.phase }) : operationFailed ? t("bknTrace.settings.traceEvidenceFailed", { desired: String(traceEvidence.desiredEnabled), effective: String(traceEvidence.effectiveEnabled), phase: traceEvidence.operation?.phase }) : traceEvidence.effectiveEnabled ? t("bknTrace.settings.traceEvidenceEnabled") : t("bknTrace.settings.traceEvidenceDisabled")}</Typography.Text>{traceEvidenceWrite ? <Switch checked={traceEvidence.desiredEnabled} disabled={updatingTraceEvidence || operationActive} onChange={setPendingTraceEvidence} /> : null}<Typography.Paragraph type="secondary">{t("bknTrace.settings.traceEvidenceRevision", { revision: traceEvidence.revision })}</Typography.Paragraph>{traceEvidence.operation?.error ? <Alert message={traceEvidence.operation.error} type="error" /> : null}{traceEvidence.services.map((service) => <Typography.Paragraph key={service.name}>{service.name}: {service.phase} ({service.readyReplicas}/{service.requiredReplicas})</Typography.Paragraph>)}</section> : null}
+    <Modal open={pendingTraceEvidence !== undefined} title={t(pendingTraceEvidence ? "bknTrace.settings.confirmEnableTitle" : "bknTrace.settings.confirmDisableTitle")} onCancel={() => setPendingTraceEvidence(undefined)} onOk={() => { const enabled = pendingTraceEvidence; setPendingTraceEvidence(undefined); if (enabled !== undefined) void updateTraceEvidence(enabled); }}><Typography.Text>{t("bknTrace.settings.confirmReleaseImpact")}</Typography.Text></Modal>
     {error ? <Alert message={error} showIcon type="error" /> : null}
     <section className={styles.section}><Typography.Title level={4}>{t("bknTrace.settings.sources")}</Typography.Title><Table columns={sourceColumns} dataSource={sources} pagination={false} rowKey="sourceId" /></section>
     <section className={styles.section}><Typography.Title level={4}>{t("bknTrace.settings.policies")}</Typography.Title><Table columns={policyColumns} dataSource={policies} pagination={false} rowKey={(record) => `${record.policyRevision}:${record.category}`} /></section>

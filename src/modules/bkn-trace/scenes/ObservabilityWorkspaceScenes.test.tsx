@@ -6,11 +6,12 @@
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ObservabilityLogsScene } from "@/modules/bkn-trace/scenes/ObservabilityLogsScene";
 import { ObservabilitySettingsScene } from "@/modules/bkn-trace/scenes/ObservabilitySettingsScene";
-import { getLogDetail, getTraceEvidenceConfiguration, listLogFacets, listLogPolicies, listLogs, listLogSources } from "@/modules/bkn-trace/services/observability.service";
+import { getLogDetail, getTraceEvidenceConfiguration, listLogFacets, listLogPolicies, listLogs, listLogSources, updateTraceEvidenceConfiguration } from "@/modules/bkn-trace/services/observability.service";
 import { getAccessProfile } from "@/modules/bkn-trace/services/trace.service";
 
 const translate = (key: string) => key;
@@ -27,7 +28,7 @@ vi.mock("@/modules/bkn-trace/services/trace.service", async (importOriginal) => 
 
 vi.mock("@/modules/bkn-trace/services/observability.service", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/modules/bkn-trace/services/observability.service")>();
-  return { ...original, getLogDetail: vi.fn(), getTraceEvidenceConfiguration: vi.fn(), listLogFacets: vi.fn(), listLogPolicies: vi.fn(), listLogs: vi.fn(), listLogSources: vi.fn() };
+  return { ...original, getLogDetail: vi.fn(), getTraceEvidenceConfiguration: vi.fn(), listLogFacets: vi.fn(), listLogPolicies: vi.fn(), listLogs: vi.fn(), listLogSources: vi.fn(), updateTraceEvidenceConfiguration: vi.fn() };
 });
 
 const profile = {
@@ -150,6 +151,56 @@ describe("observability workspace scenes", () => {
     expect(screen.getByText("7 bknTrace.settings.days")).not.toBeNull();
     expect(screen.getByText("bknTrace.settings.readOnlyNotice")).not.toBeNull();
     expect(screen.getByText("bknTrace.settings.traceEvidenceDisabled")).not.toBeNull();
+  });
+
+  it("有写权限时确认后提交统一开关且不乐观显示已开启", async () => {
+    vi.mocked(getAccessProfile).mockResolvedValue({ ...profile, traceEvidenceConfigurationWrite: true });
+    vi.mocked(updateTraceEvidenceConfiguration).mockResolvedValue({
+      desiredEnabled: true, effectiveEnabled: false, revision: 1,
+      operation: { id: "tec-1", phase: "pending" }, services: [],
+    });
+    render(<ObservabilitySettingsScene />);
+    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(await screen.findByText("OK"));
+    await waitFor(() => expect(updateTraceEvidenceConfiguration).toHaveBeenCalledWith(true, 0));
+    expect(await screen.findByText("bknTrace.settings.traceEvidenceOperation")).not.toBeNull();
+    expect(screen.queryByText("bknTrace.settings.traceEvidenceEnabled")).toBeNull();
+  });
+
+  it("发布冲突后刷新服务端 revision，下一次提交使用新版本", async () => {
+    vi.mocked(getAccessProfile).mockResolvedValue({ ...profile, traceEvidenceConfigurationWrite: true });
+    vi.mocked(getTraceEvidenceConfiguration)
+      .mockResolvedValueOnce({ desiredEnabled: false, effectiveEnabled: false, revision: 0, services: [] })
+      .mockResolvedValue({ desiredEnabled: false, effectiveEnabled: false, revision: 1, services: [] });
+    vi.mocked(updateTraceEvidenceConfiguration)
+      .mockRejectedValueOnce(new Error("409 conflict"))
+      .mockResolvedValueOnce({
+        desiredEnabled: true, effectiveEnabled: false, revision: 2,
+        operation: { id: "tec-2", phase: "pending" }, services: [],
+      });
+    render(<StrictMode><ObservabilitySettingsScene /></StrictMode>);
+
+    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(await screen.findByText("OK"));
+    await waitFor(() => expect(getTraceEvidenceConfiguration).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("bknTrace.errors.traceEvidenceUpdateFailed")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(await screen.findByText("OK"));
+    await waitFor(() => expect(updateTraceEvidenceConfiguration).toHaveBeenLastCalledWith(true, 1));
+  });
+
+  it("发布失败时展示期望值与生效值差异，不冒充默认关闭", async () => {
+    vi.mocked(getTraceEvidenceConfiguration).mockResolvedValue({
+      desiredEnabled: true, effectiveEnabled: false, revision: 1,
+      operation: { error: "managed release failed", id: "tec-1", phase: "rollback_failed" },
+      services: [{ appliedRevision: 0, desiredRevision: 1, name: "bkn-backend", phase: "failed", readyReplicas: 0, requiredReplicas: 1 }],
+    });
+    render(<ObservabilitySettingsScene />);
+
+    expect(await screen.findByText("bknTrace.settings.traceEvidenceFailed")).not.toBeNull();
+    expect(screen.queryByText("bknTrace.settings.traceEvidenceDisabled")).toBeNull();
+    expect(screen.getByText("managed release failed")).not.toBeNull();
   });
 
   it("无全局日志能力时不发起日志检索", async () => {
