@@ -500,21 +500,29 @@ export async function syncUserRoleBindings(
   });
   const current = new Set(bound.data.role_ids ?? []);
   const want = new Set(roleIds);
-  await Promise.all([
-    ...[...want].filter((roleId) => !current.has(roleId)).map((roleId) =>
+  const removedRoleIDs = [...current].filter((roleId) => !want.has(roleId));
+  const addedRoleIDs = [...want].filter((roleId) => !current.has(roleId));
+
+  // The built-in admin, security, and audit roles are mutually exclusive.  A
+  // concurrent POST can therefore observe the old binding before its DELETE
+  // has committed and be rejected with 409. Finish removals before additions.
+  await Promise.all(
+    removedRoleIDs.map((roleId) =>
+      http.delete(`${ADMIN}/role-bindings`, {
+        data: { accessor_id: accessorId, role_id: roleId },
+        skipErrorToast: options?.skipErrorToast,
+      }),
+    ),
+  );
+  await Promise.all(
+    addedRoleIDs.map((roleId) =>
       http.post(
         `${ADMIN}/role-bindings`,
         { accessor_id: accessorId, role_id: roleId },
         { skipErrorToast: options?.skipErrorToast },
       ),
     ),
-    ...[...current].filter((roleId) => !want.has(roleId)).map((roleId) =>
-      http.delete(`${ADMIN}/role-bindings`, {
-        data: { accessor_id: accessorId, role_id: roleId },
-        skipErrorToast: options?.skipErrorToast,
-      }),
-    ),
-  ]);
+  );
 }
 
 export async function updateUser(
