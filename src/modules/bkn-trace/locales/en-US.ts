@@ -41,6 +41,7 @@ export const bknTraceEnUS = {
 		traceEvidence: "Trace and evidence chain",
 		traceEvidenceDisabled: "Disabled",
 		traceEvidenceEnabled: "Enabled",
+		traceEvidenceOperation: "Release in progress: {{phase}}",
 		traceEvidenceRevision: "Configuration revision {{revision}}",
       sources: "Source coverage",
       title: "Observability Settings",

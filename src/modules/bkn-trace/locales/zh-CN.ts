@@ -41,6 +41,7 @@ export const bknTraceZhCN = {
 		traceEvidence: "Trace 与证据链",
 		traceEvidenceDisabled: "已关闭",
 		traceEvidenceEnabled: "已开启",
+		traceEvidenceOperation: "发布中：{{phase}}",
 		traceEvidenceRevision: "配置版本 {{revision}}",
       sources: "来源覆盖",
       title: "可观测性设置",
