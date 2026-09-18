@@ -9,7 +9,10 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { KnowledgeNetworkImportConflictError } from "@/modules/knowledge-network/services/shared/runtime";
+import {
+  KnowledgeNetworkImportBindingError,
+  KnowledgeNetworkImportConflictError,
+} from "@/modules/knowledge-network/services/shared/runtime";
 
 const mocks = vi.hoisted(() => ({
   form: {
@@ -246,5 +249,64 @@ describe("KnowledgeNetworkImportButton", () => {
     expect(screen.getByRole("button", { name: "common.cancel" })).toBeDisabled();
 
     resolveRequest?.();
+  });
+
+  it("keeps an incomplete binding error in the import dialog without a toast", async () => {
+    mocks.importKnowledgeNetwork.mockRejectedValueOnce(
+      new KnowledgeNetworkImportBindingError(
+        "Import bindings are incomplete",
+        "toolbox orders-api is missing bound tools: get-order",
+        "Import with detached bindings to continue.",
+      ),
+    );
+    render(<KnowledgeNetworkImportButton onImported={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "upload-file" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "knowledgeNetwork.importButton" }));
+
+    await screen.findByText("Import bindings are incomplete");
+    expect(screen.getByText("toolbox orders-api is missing bound tools: get-order")).toBeInTheDocument();
+    expect(mocks.messageError).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("replaces a binding error with a later import conflict", async () => {
+    mocks.importKnowledgeNetwork.mockRejectedValueOnce(
+      new KnowledgeNetworkImportBindingError(
+        "Import bindings are incomplete",
+        "toolbox orders-api is missing bound tools: get-order",
+      ),
+    );
+    render(<KnowledgeNetworkImportButton onImported={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "upload-file" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "knowledgeNetwork.importButton" }));
+    await screen.findByText("Import bindings are incomplete");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "knowledgeNetwork.importButton" }));
+    await screen.findByText("Knowledge network ID already exists.");
+
+    expect(screen.queryByText("Import bindings are incomplete")).not.toBeInTheDocument();
+    expect(screen.queryByText("toolbox orders-api is missing bound tools: get-order")).not.toBeInTheDocument();
+  });
+
+  it("replaces a conflict with a binding error from a conflict action", async () => {
+    render(<KnowledgeNetworkImportButton onImported={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "upload-file" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "knowledgeNetwork.importButton" }));
+    await screen.findByText("Knowledge network ID already exists.");
+    mocks.importKnowledgeNetwork.mockRejectedValueOnce(
+      new KnowledgeNetworkImportBindingError("Import bindings are incomplete"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "knowledgeNetwork.importOverwrite" }));
+    await screen.findByText("Import bindings are incomplete");
+
+    expect(screen.queryByText("Knowledge network ID already exists.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "common.create" })).not.toBeInTheDocument();
   });
 });

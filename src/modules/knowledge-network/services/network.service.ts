@@ -46,6 +46,7 @@ import {
   filterKnowledgeNetworks,
   formatTimestamp,
   logServiceFallback,
+  KnowledgeNetworkImportBindingError,
   stringFromUnknown,
   throwImportConflict,
   useMock,
@@ -73,6 +74,9 @@ const KNOWLEDGE_NETWORK_IMPORT_CONFLICT_ERROR_CODES = new Set([
   "OntologyManager.KnowledgeNetwork.KNIDExisted",
   "OntologyManager.KnowledgeNetwork.KNNameExisted",
 ]);
+
+const KNOWLEDGE_NETWORK_IMPORT_BINDING_ERROR_CODE =
+  "BknBackend.KnowledgeNetwork.Proxy.TargetInvalid";
 
 export async function listKnowledgeNetworks(
   query: KnowledgeNetworkListQuery,
@@ -385,15 +389,33 @@ export async function importKnowledgeNetwork(
         import_mode: importMode,
         validate_dependency: false,
       },
+      skipErrorToast: true,
     });
   } catch (error) {
     const response = (
-      error as { response?: { data?: { error_code?: string; description?: string } } }
+      error as {
+        response?: {
+          data?: {
+            error_code?: string;
+            description?: string;
+            error_details?: string;
+            solution?: string;
+          };
+        };
+      }
     ).response?.data;
-    const { description, error_code: errorCode } = response ?? {};
+    const { description, error_code: errorCode, error_details: details, solution } = response ?? {};
 
     if (KNOWLEDGE_NETWORK_IMPORT_CONFLICT_ERROR_CODES.has(errorCode ?? "")) {
       throwImportConflict(description ?? i18n.t("knowledgeNetwork.importConflictTitle"));
+    }
+
+    if (errorCode === KNOWLEDGE_NETWORK_IMPORT_BINDING_ERROR_CODE) {
+      throw new KnowledgeNetworkImportBindingError(
+        description ?? i18n.t("knowledgeNetwork.importBindingInvalidTitle"),
+        details,
+        solution,
+      );
     }
 
     throw error;

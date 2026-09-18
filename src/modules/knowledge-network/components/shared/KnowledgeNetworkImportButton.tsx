@@ -14,6 +14,7 @@ import { useAppServices } from "@/framework/context/use-app-services";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import {
+  KnowledgeNetworkImportBindingError,
   importKnowledgeNetwork,
   KnowledgeNetworkImportConflictError,
 } from "@/modules/knowledge-network/services/knowledge-network.service";
@@ -47,6 +48,7 @@ export function KnowledgeNetworkImportButton({
   const [form] = Form.useForm<{ identifier: string; name: string }>();
   const [bindingPolicy, setBindingPolicy] = useState<KnowledgeNetworkBindingPolicy>("preserve");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [bindingError, setBindingError] = useState<KnowledgeNetworkImportBindingError | null>(null);
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [submittingAction, setSubmittingAction] = useState<ImportSubmitAction | null>(null);
   const [pendingPayload, setPendingPayload] = useState<ImportPayload | null>(null);
@@ -54,6 +56,7 @@ export function KnowledgeNetworkImportButton({
 
   const closeImportDialog = () => {
     setImportDialogOpen(false);
+    setBindingError(null);
     setConflictMessage(null);
     setPendingPayload(null);
     form.resetFields();
@@ -73,6 +76,7 @@ export function KnowledgeNetworkImportButton({
       await onImported();
     } catch (error) {
       if (error instanceof KnowledgeNetworkImportConflictError) {
+        setBindingError(null);
         setPendingPayload(payload);
         setConflictMessage(error.message);
         form.setFieldsValue({
@@ -82,6 +86,14 @@ export function KnowledgeNetworkImportButton({
         return;
       }
 
+      if (error instanceof KnowledgeNetworkImportBindingError) {
+        setConflictMessage(null);
+        setBindingError(error);
+        return;
+      }
+
+      setBindingError(null);
+      setConflictMessage(null);
       void message.error(extractRequestErrorMessage(error));
     } finally {
       setSubmittingAction(null);
@@ -96,6 +108,7 @@ export function KnowledgeNetworkImportButton({
         const payload = JSON.parse(readFileReaderText(event.target?.result)) as ImportPayload;
         setPendingPayload(payload);
         setBindingPolicy("preserve");
+        setBindingError(null);
         setConflictMessage(null);
         form.resetFields();
         setImportDialogOpen(true);
@@ -198,6 +211,7 @@ export function KnowledgeNetworkImportButton({
 
             if (isKnowledgeNetworkBindingPolicy(nextBindingPolicy)) {
               setBindingPolicy(nextBindingPolicy);
+              setBindingError(null);
             }
           }}
           value={bindingPolicy}
@@ -221,6 +235,19 @@ export function KnowledgeNetworkImportButton({
             </Radio>
           </Space>
         </Radio.Group>
+        {bindingError ? (
+          <Alert
+            description={
+              <Space direction="vertical" size={4}>
+                <Typography.Text strong>{bindingError.message}</Typography.Text>
+                {bindingError.details ? <Typography.Text>{bindingError.details}</Typography.Text> : null}
+                {bindingError.solution ? <Typography.Text>{bindingError.solution}</Typography.Text> : null}
+              </Space>
+            }
+            showIcon
+            type="error"
+          />
+        ) : null}
         {conflictMessage ? (
           <>
             <Alert description={conflictMessage} showIcon type="error" />
