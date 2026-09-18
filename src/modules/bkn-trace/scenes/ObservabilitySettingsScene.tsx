@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import styles from "@/modules/bkn-trace/scenes/ObservabilityWorkspace.module.css";
-import { listLogPolicies, listLogSources, type LogPolicy, type LogSourceStatus } from "@/modules/bkn-trace/services/observability.service";
+import { getTraceEvidenceConfiguration, listLogPolicies, listLogSources, type LogPolicy, type LogSourceStatus, type TraceEvidenceConfiguration } from "@/modules/bkn-trace/services/observability.service";
 import { getAccessProfile } from "@/modules/bkn-trace/services/trace.service";
 
 export function ObservabilitySettingsScene() {
@@ -21,22 +21,25 @@ export function ObservabilitySettingsScene() {
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string>();
+  const [traceEvidence, setTraceEvidence] = useState<TraceEvidenceConfiguration>();
 
   useEffect(() => {
     let active = true;
     getAccessProfile().then(async (profile) => {
-      if (!profile.globalLogSearch && !profile.logPolicyRead) {
+      if (!profile.globalLogSearch && !profile.logPolicyRead && !profile.traceEvidenceConfigurationRead) {
         if (active) { setDenied(true); setLoading(false); }
         return;
       }
-      const [sourceResult, policyResult] = await Promise.allSettled([
+      const [sourceResult, policyResult, traceEvidenceResult] = await Promise.allSettled([
         profile.globalLogSearch ? listLogSources() : Promise.resolve([]),
         profile.logPolicyRead ? listLogPolicies() : Promise.resolve([]),
+        profile.traceEvidenceConfigurationRead ? getTraceEvidenceConfiguration() : Promise.resolve(undefined),
       ]);
       if (!active) return;
       if (sourceResult.status === "fulfilled") setSources(sourceResult.value);
       if (policyResult.status === "fulfilled") setPolicies(policyResult.value);
-      if (sourceResult.status === "rejected" && policyResult.status === "rejected") setError(t("bknTrace.errors.queryFailed"));
+      if (traceEvidenceResult.status === "fulfilled") setTraceEvidence(traceEvidenceResult.value);
+      if (sourceResult.status === "rejected" && policyResult.status === "rejected" && traceEvidenceResult.status === "rejected") setError(t("bknTrace.errors.queryFailed"));
       setLoading(false);
     }).catch(() => {
       if (active) { setError(t("bknTrace.errors.accessProfileFailed")); setLoading(false); }
@@ -62,6 +65,7 @@ export function ObservabilitySettingsScene() {
   return <div className={styles.workspace}>
     <header className={styles.header}><div><Typography.Title level={3}>{t("bknTrace.settings.title")}</Typography.Title><Typography.Text type="secondary">{t("bknTrace.settings.description")}</Typography.Text></div></header>
     <Alert message={t("bknTrace.settings.readOnlyNotice")} showIcon type="info" />
+    {traceEvidence ? <section className={styles.section}><Typography.Title level={4}>{t("bknTrace.settings.traceEvidence")}</Typography.Title><Typography.Text>{traceEvidence.effectiveEnabled ? t("bknTrace.settings.traceEvidenceEnabled") : t("bknTrace.settings.traceEvidenceDisabled")}</Typography.Text><Typography.Paragraph type="secondary">{t("bknTrace.settings.traceEvidenceRevision", { revision: traceEvidence.revision })}</Typography.Paragraph></section> : null}
     {error ? <Alert message={error} showIcon type="error" /> : null}
     <section className={styles.section}><Typography.Title level={4}>{t("bknTrace.settings.sources")}</Typography.Title><Table columns={sourceColumns} dataSource={sources} pagination={false} rowKey="sourceId" /></section>
     <section className={styles.section}><Typography.Title level={4}>{t("bknTrace.settings.policies")}</Typography.Title><Table columns={policyColumns} dataSource={policies} pagination={false} rowKey={(record) => `${record.policyRevision}:${record.category}`} /></section>

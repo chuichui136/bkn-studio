@@ -10,7 +10,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import { ObservabilityLogsScene } from "@/modules/bkn-trace/scenes/ObservabilityLogsScene";
 import { ObservabilitySettingsScene } from "@/modules/bkn-trace/scenes/ObservabilitySettingsScene";
-import { getLogDetail, listLogFacets, listLogPolicies, listLogs, listLogSources } from "@/modules/bkn-trace/services/observability.service";
+import { getLogDetail, getTraceEvidenceConfiguration, listLogFacets, listLogPolicies, listLogs, listLogSources } from "@/modules/bkn-trace/services/observability.service";
 import { getAccessProfile } from "@/modules/bkn-trace/services/trace.service";
 
 const translate = (key: string) => key;
@@ -27,7 +27,7 @@ vi.mock("@/modules/bkn-trace/services/trace.service", async (importOriginal) => 
 
 vi.mock("@/modules/bkn-trace/services/observability.service", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/modules/bkn-trace/services/observability.service")>();
-  return { ...original, getLogDetail: vi.fn(), listLogFacets: vi.fn(), listLogPolicies: vi.fn(), listLogs: vi.fn(), listLogSources: vi.fn() };
+  return { ...original, getLogDetail: vi.fn(), getTraceEvidenceConfiguration: vi.fn(), listLogFacets: vi.fn(), listLogPolicies: vi.fn(), listLogs: vi.fn(), listLogSources: vi.fn() };
 });
 
 const profile = {
@@ -39,6 +39,8 @@ const profile = {
   logExport: false,
   logPolicyRead: true,
   logSensitiveFields: false,
+  traceEvidenceConfigurationRead: true,
+  traceEvidenceConfigurationWrite: false,
   managementAudit: false,
   securityAudit: false,
   technicalTrace: true,
@@ -80,6 +82,7 @@ describe("observability workspace scenes", () => {
 			},
 			policyRevision: "r6.2-default", redactedFields: [], relatedTraceIds: ["trace-a"],
 		});
+    vi.mocked(getTraceEvidenceConfiguration).mockResolvedValue({ desiredEnabled: false, effectiveEnabled: false, revision: 0, services: [] });
   });
 
   afterEach(() => cleanup());
@@ -146,6 +149,7 @@ describe("observability workspace scenes", () => {
     expect(await screen.findByText("otel-ss4o")).not.toBeNull();
     expect(screen.getByText("7 bknTrace.settings.days")).not.toBeNull();
     expect(screen.getByText("bknTrace.settings.readOnlyNotice")).not.toBeNull();
+    expect(screen.getByText("bknTrace.settings.traceEvidenceDisabled")).not.toBeNull();
   });
 
   it("无全局日志能力时不发起日志检索", async () => {

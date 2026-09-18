@@ -8,12 +8,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getMock = vi.hoisted(() => vi.fn());
+const putMock = vi.hoisted(() => vi.fn());
 const runtimeConfigMock = vi.hoisted(() => ({
   currentUser: { businessDomainId: "bd_demo" },
 }));
 
 vi.mock("@/framework/request/http", () => ({
-  http: { get: getMock },
+  http: { get: getMock, put: putMock },
 }));
 
 vi.mock("@/framework/runtime/config", () => ({
@@ -24,6 +25,7 @@ describe("observability service", () => {
   beforeEach(() => {
     vi.resetModules();
     getMock.mockReset();
+    putMock.mockReset();
   });
 
   it("queries the unified log API without exposing storage details", async () => {
@@ -110,6 +112,48 @@ describe("observability service", () => {
     });
     expect(sources[0]).toMatchObject({ sourceId: "otel", status: "available" });
     expect(policies[0]).toMatchObject({ category: "runtime.system", retentionDays: 7, readOnly: true });
+  });
+
+  it("loads the effective trace evidence release state from the gateway", async () => {
+    getMock.mockResolvedValueOnce({ data: {
+      desired_enabled: true,
+      effective_enabled: false,
+      revision: 8,
+      operation: { id: "tec-8", phase: "rolling_out" },
+      services: [{ name: "bkn-backend", desired_revision: 8, applied_revision: 7, phase: "waiting_ready", ready_replicas: 1, required_replicas: 2 }],
+    } });
+    const { getTraceEvidenceConfiguration } = await import("@/modules/bkn-trace/services/observability.service");
+
+    const result = await getTraceEvidenceConfiguration();
+
+    expect(getMock).toHaveBeenCalledWith("/observability/v1/trace-evidence-configuration", {
+      headers: { "x-business-domain": "bd_demo" },
+      skipErrorToast: true,
+    });
+    expect(result).toMatchObject({ desiredEnabled: true, effectiveEnabled: false, revision: 8, operation: { id: "tec-8", phase: "rolling_out" } });
+    expect(result.services[0]).toMatchObject({ name: "bkn-backend", desiredRevision: 8, appliedRevision: 7, readyReplicas: 1, requiredReplicas: 2 });
+  });
+
+  it("submits only a boolean desired state and the optimistic revision", async () => {
+    putMock.mockResolvedValueOnce({ data: {
+      desired_enabled: true,
+      effective_enabled: false,
+      revision: 8,
+      operation: { id: "tec-8", phase: "pending" },
+      services: [],
+    } });
+    const { updateTraceEvidenceConfiguration } = await import("@/modules/bkn-trace/services/observability.service");
+
+    const result = await updateTraceEvidenceConfiguration(true, 7);
+
+    expect(putMock).toHaveBeenCalledWith("/observability/v1/trace-evidence-configuration", {
+      enabled: true,
+      expected_revision: 7,
+    }, {
+      headers: { "x-business-domain": "bd_demo" },
+      skipErrorToast: true,
+    });
+    expect(result).toMatchObject({ desiredEnabled: true, effectiveEnabled: false, revision: 8 });
   });
 
 	 it("loads an authorized log detail and filtered facets from the gateway", async () => {
