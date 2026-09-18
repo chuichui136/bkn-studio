@@ -16,6 +16,15 @@ export const executionFactoryViewPermissions = [
   "execution-factory:skill:view",
 ] as const;
 
+/** Creation alone is enough to open the management entry, even though it does not permit listing. */
+export const executionFactoryCreatePermissions = [
+  "execution-factory:operator:create",
+  "execution-factory:toolbox:create",
+  "execution-factory:function:create",
+  "execution-factory:mcp:create",
+  "execution-factory:skill:create",
+] as const;
+
 export const executionFactoryViewPermissionByTab: Record<ExecutionUnitTab, string> = {
   operator: "execution-factory:operator:view",
   toolbox: "execution-factory:toolbox:view",
@@ -41,9 +50,15 @@ export function filterAccessibleExecutionUnitTabs(
 export function canAccessExecutionUnitManagement(
   currentPermissions: readonly string[],
 ): boolean {
-  return executionFactoryViewPermissions.some((permission) =>
-    currentPermissions.includes(permission),
-  );
+  return [...executionFactoryViewPermissions, ...executionFactoryCreatePermissions]
+    .some((permission) => currentPermissions.includes(permission));
+}
+
+/** Whether it is safe to mount a list scene, which issues resource-list requests. */
+export function canViewExecutionUnitManagement(
+  currentPermissions: readonly string[],
+): boolean {
+  return executionFactoryViewPermissions.some((permission) => currentPermissions.includes(permission));
 }
 
 export type ToolboxView = "openapi" | "function";

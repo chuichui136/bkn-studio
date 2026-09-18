@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canAccessExecutionUnitManagement,
+  canViewExecutionUnitManagement,
   filterAccessibleExecutionUnitTabs,
   filterAccessibleToolboxViews,
 } from "@/modules/execution-factory/permissions";
@@ -30,13 +31,20 @@ describe("filterAccessibleExecutionUnitTabs", () => {
     expect(filterAccessibleExecutionUnitTabs([...tabs], permissions)).toEqual(expected);
   });
 
-  it("does not mount the management list when the user has no execution-unit view grant", () => {
+  it("does not allow entry when the user has neither an execution-unit view nor create grant", () => {
     expect(canAccessExecutionUnitManagement([])).toBe(false);
     expect(canAccessExecutionUnitManagement(["knowledge-network:view"])).toBe(false);
   });
 
   it("allows the management list when the user can view at least one execution-unit type", () => {
     expect(canAccessExecutionUnitManagement(["execution-factory:mcp:view"])).toBe(true);
+    expect(canViewExecutionUnitManagement(["execution-factory:mcp:view"])).toBe(true);
+  });
+
+  it("allows entry but not list mounting for a create-only user", () => {
+    const permissions = ["execution-factory:function:create"];
+    expect(canAccessExecutionUnitManagement(permissions)).toBe(true);
+    expect(canViewExecutionUnitManagement(permissions)).toBe(false);
   });
 });
 
