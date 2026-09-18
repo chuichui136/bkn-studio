@@ -5,6 +5,8 @@
  * Conditions. See LICENSE for the full text.
  */
 
+import type { TimeRailItem } from "../evidence-chain/evidence-chain.types";
+
 import i18n from "@/app/locales/i18n";
 import { http } from "@/framework/request/http";
 import { getRuntimeConfig } from "@/framework/runtime/config";
@@ -110,6 +112,7 @@ export type BusinessProvenanceDerivedFact = {
 };
 
 export type BusinessProvenanceInteraction = {
+  timeRail?: TimeRailItem[];
   interactionId: string;
   interactionQuestion?: string;
   interactionResult?: string;
@@ -210,6 +213,7 @@ export async function getBusinessProvenanceInteraction(
   interactionId: string,
 ): Promise<BusinessProvenanceInteraction> {
   const response = await http.get<{
+    time_rail?: TimeRailItem[];
     interaction_id?: string;
     interaction_question?: string;
     interaction_result?: string;
@@ -266,6 +270,7 @@ export async function getBusinessProvenanceInteraction(
     skipErrorToast: true,
   });
   return {
+    timeRail: response.data.time_rail,
     interactionId: response.data.interaction_id ?? interactionId,
     interactionQuestion: response.data.interaction_question,
     interactionResult: response.data.interaction_result,

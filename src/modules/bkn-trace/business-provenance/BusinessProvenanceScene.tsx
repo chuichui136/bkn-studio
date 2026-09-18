@@ -33,6 +33,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { TimeRailView } from "../evidence-chain/BusinessProvenance016";
 import { CurrentExplanationPanel } from "../evidence-chain/CurrentExplanationPanel";
 import i18n from "@/app/locales/i18n";
 import { MarkdownText } from "@/framework/ui/common/MarkdownText";
@@ -1434,190 +1435,214 @@ export function BusinessProvenanceScene() {
                 </button>
               </div>
               {view === "timeline" ? (
-                <section className={styles.timelineWorkspace}>
-                  <header className={styles.timelineHeader}>
-                    <div>
-                      <h3>{bpText("timeline.title")}</h3>
-                      <p>{bpText("timeline.description")}</p>
+                projection.timeRail?.some(
+                  (item) => item.capability?.evidence_contract === "managed_function_execution/v1",
+                ) ? (
+                  <TimeRailView
+                    items={projection.timeRail}
+                    summaries={Object.fromEntries(
+                      projection.operations.map((operation) => [
+                        operation.operationId,
+                        {
+                          name: operationTitle(operation),
+                          object: requestedObjectDescription(operation, projection.operations),
+                          condition: operationCondition(operation),
+                          result: operationResult(operation, projection.derivedFacts),
+                        },
+                      ]),
+                    )}
+                  />
+                ) : (
+                  <section className={styles.timelineWorkspace}>
+                    <header className={styles.timelineHeader}>
+                      <div>
+                        <h3>{bpText("timeline.title")}</h3>
+                        <p>{bpText("timeline.description")}</p>
+                      </div>
+                      <span>{bpText("callCount", { count: projection.operations.length })}</span>
+                    </header>
+                    <div
+                      className={styles.timelineFilters}
+                      role="group"
+                      aria-label={bpText("timeline.filterLabel")}
+                    >
+                      <button
+                        type="button"
+                        className={timelineFilter === "all" ? styles.timelineFilterActive : ""}
+                        onClick={() => {
+                          setTimelineFilter("all");
+                          setDetailOperation(projection.operations[0]);
+                        }}
+                      >
+                        {bpText("timeline.all", { count: projection.operations.length })}
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          timelineFilter === "completed" ? styles.timelineFilterActive : ""
+                        }
+                        onClick={() => {
+                          setTimelineFilter("completed");
+                          setDetailOperation(
+                            projection.operations.find((item) => item.callStatus === "completed"),
+                          );
+                        }}
+                      >
+                        {bpText("timeline.completed", {
+                          count: projection.operations.filter(
+                            (item) => item.callStatus === "completed",
+                          ).length,
+                        })}
+                      </button>
+                      <button
+                        type="button"
+                        className={timelineFilter === "failed" ? styles.timelineFilterActive : ""}
+                        onClick={() => {
+                          setTimelineFilter("failed");
+                          setDetailOperation(
+                            projection.operations.find((item) => item.callStatus === "failed"),
+                          );
+                        }}
+                      >
+                        {bpText("timeline.failed", {
+                          count: projection.operations.filter(
+                            (item) => item.callStatus === "failed",
+                          ).length,
+                        })}
+                      </button>
                     </div>
-                    <span>{bpText("callCount", { count: projection.operations.length })}</span>
-                  </header>
-                  <div
-                    className={styles.timelineFilters}
-                    role="group"
-                    aria-label={bpText("timeline.filterLabel")}
-                  >
-                    <button
-                      type="button"
-                      className={timelineFilter === "all" ? styles.timelineFilterActive : ""}
-                      onClick={() => {
-                        setTimelineFilter("all");
-                        setDetailOperation(projection.operations[0]);
-                      }}
-                    >
-                      {bpText("timeline.all", { count: projection.operations.length })}
-                    </button>
-                    <button
-                      type="button"
-                      className={timelineFilter === "completed" ? styles.timelineFilterActive : ""}
-                      onClick={() => {
-                        setTimelineFilter("completed");
-                        setDetailOperation(
-                          projection.operations.find((item) => item.callStatus === "completed"),
-                        );
-                      }}
-                    >
-                      {bpText("timeline.completed", {
-                        count: projection.operations.filter(
-                          (item) => item.callStatus === "completed",
-                        ).length,
-                      })}
-                    </button>
-                    <button
-                      type="button"
-                      className={timelineFilter === "failed" ? styles.timelineFilterActive : ""}
-                      onClick={() => {
-                        setTimelineFilter("failed");
-                        setDetailOperation(
-                          projection.operations.find((item) => item.callStatus === "failed"),
-                        );
-                      }}
-                    >
-                      {bpText("timeline.failed", {
-                        count: projection.operations.filter((item) => item.callStatus === "failed")
-                          .length,
-                      })}
-                    </button>
-                  </div>
-                  {projection.operations.length === 0 ? (
-                    <Empty
-                      description={bpText("rounds.noOperations")}
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    />
-                  ) : visibleOperations.length === 0 ? (
-                    <Empty
-                      description={bpText("timeline.emptyFiltered")}
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    />
-                  ) : (
-                    <div className={styles.timelineLayout}>
-                      <div className={styles.timelineList}>
-                        {visibleOperations.map(({ operation, index }) => (
-                          <button
-                            type="button"
-                            className={`${styles.timelineBusinessCard} ${detailOperation?.operationId === operation.operationId ? styles.timelineBusinessCardSelected : ""}`}
-                            key={operation.operationId}
-                            onClick={() => setDetailOperation(operation)}
-                          >
-                            <span className={styles.timelineOrder}>
-                              {String(index + 1).padStart(2, "0")}
-                            </span>
-                            <div>
+                    {projection.operations.length === 0 ? (
+                      <Empty
+                        description={bpText("rounds.noOperations")}
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      />
+                    ) : visibleOperations.length === 0 ? (
+                      <Empty
+                        description={bpText("timeline.emptyFiltered")}
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      />
+                    ) : (
+                      <div className={styles.timelineLayout}>
+                        <div className={styles.timelineList}>
+                          {visibleOperations.map(({ operation, index }) => (
+                            <button
+                              type="button"
+                              className={`${styles.timelineBusinessCard} ${detailOperation?.operationId === operation.operationId ? styles.timelineBusinessCardSelected : ""}`}
+                              key={operation.operationId}
+                              onClick={() => setDetailOperation(operation)}
+                            >
+                              <span className={styles.timelineOrder}>
+                                {String(index + 1).padStart(2, "0")}
+                              </span>
+                              <div>
+                                <header>
+                                  <h4>
+                                    <OperationName operation={operation} />
+                                  </h4>
+                                  <Tag
+                                    color={
+                                      operation.callStatus === "completed" ? "success" : "error"
+                                    }
+                                  >
+                                    {statusLabel(operation.callStatus)}
+                                  </Tag>
+                                </header>
+                                <dl>
+                                  <OperationSummaryRows
+                                    operation={operation}
+                                    operations={projection.operations}
+                                    derivedFacts={projection.derivedFacts}
+                                  />
+                                </dl>
+                                <footer>
+                                  <small>
+                                    {formatClock(operation.startedAt)} ·{" "}
+                                    {formatDuration(operation.durationMs)}
+                                  </small>
+                                </footer>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                        <aside
+                          ref={timelineInspectorRef}
+                          className={styles.timelineInspector}
+                          aria-label={bpText("detail.roundCall")}
+                        >
+                          {detailOperation ? (
+                            <>
                               <header>
-                                <h4>
-                                  <OperationName operation={operation} />
-                                </h4>
-                                <Tag
-                                  color={operation.callStatus === "completed" ? "success" : "error"}
+                                <div>
+                                  <small>{bpText("detail.roundCall")}</small>
+                                  <h3>
+                                    <OperationName operation={detailOperation} />
+                                  </h3>
+                                </div>
+                                <span
+                                  className={
+                                    detailOperation.callStatus === "completed"
+                                      ? styles.completed
+                                      : styles.failed
+                                  }
                                 >
-                                  {statusLabel(operation.callStatus)}
-                                </Tag>
+                                  {statusLabel(detailOperation.callStatus)}
+                                </span>
                               </header>
                               <dl>
                                 <OperationSummaryRows
-                                  operation={operation}
+                                  operation={detailOperation}
                                   operations={projection.operations}
                                   derivedFacts={projection.derivedFacts}
                                 />
+                                <dt>{bpText("detail.operationId")}</dt>
+                                <dd>
+                                  <code>{detailOperation.operationId}</code>
+                                </dd>
                               </dl>
-                              <footer>
-                                <small>
-                                  {formatClock(operation.startedAt)} ·{" "}
-                                  {formatDuration(operation.durationMs)}
-                                </small>
-                              </footer>
-                            </div>
-                          </button>
-                        ))}
+                              {payloadText(detailOperation.input) ? (
+                                <details>
+                                  <summary>{bpText("detail.recordedInput")}</summary>
+                                  <pre>{payloadText(detailOperation.input)}</pre>
+                                  <Button
+                                    size="small"
+                                    icon={<CopyOutlined />}
+                                    onClick={() => void copyPayload(detailOperation.input)}
+                                  >
+                                    {bpText("detail.copyPayload")}
+                                  </Button>
+                                </details>
+                              ) : null}
+                              {payloadText(detailOperation.output) ? (
+                                <details>
+                                  <summary>{bpText("detail.recordedOutput")}</summary>
+                                  <pre>{payloadText(detailOperation.output)}</pre>
+                                  <Button
+                                    size="small"
+                                    icon={<CopyOutlined />}
+                                    onClick={() => void copyPayload(detailOperation.output)}
+                                  >
+                                    {bpText("detail.copyPayload")}
+                                  </Button>
+                                </details>
+                              ) : null}
+                              {payloadText(detailOperation.error) ? (
+                                <details>
+                                  <summary>{bpText("detail.recordedError")}</summary>
+                                  <pre>{payloadText(detailOperation.error)}</pre>
+                                </details>
+                              ) : null}
+                            </>
+                          ) : (
+                            <Empty
+                              description={bpText("timeline.selectCall")}
+                              image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            />
+                          )}
+                        </aside>
                       </div>
-                      <aside
-                        ref={timelineInspectorRef}
-                        className={styles.timelineInspector}
-                        aria-label={bpText("detail.roundCall")}
-                      >
-                        {detailOperation ? (
-                          <>
-                            <header>
-                              <div>
-                                <small>{bpText("detail.roundCall")}</small>
-                                <h3>
-                                  <OperationName operation={detailOperation} />
-                                </h3>
-                              </div>
-                              <span
-                                className={
-                                  detailOperation.callStatus === "completed"
-                                    ? styles.completed
-                                    : styles.failed
-                                }
-                              >
-                                {statusLabel(detailOperation.callStatus)}
-                              </span>
-                            </header>
-                            <dl>
-                              <OperationSummaryRows
-                                operation={detailOperation}
-                                operations={projection.operations}
-                                derivedFacts={projection.derivedFacts}
-                              />
-                              <dt>{bpText("detail.operationId")}</dt>
-                              <dd>
-                                <code>{detailOperation.operationId}</code>
-                              </dd>
-                            </dl>
-                            {payloadText(detailOperation.input) ? (
-                              <details>
-                                <summary>{bpText("detail.recordedInput")}</summary>
-                                <pre>{payloadText(detailOperation.input)}</pre>
-                                <Button
-                                  size="small"
-                                  icon={<CopyOutlined />}
-                                  onClick={() => void copyPayload(detailOperation.input)}
-                                >
-                                  {bpText("detail.copyPayload")}
-                                </Button>
-                              </details>
-                            ) : null}
-                            {payloadText(detailOperation.output) ? (
-                              <details>
-                                <summary>{bpText("detail.recordedOutput")}</summary>
-                                <pre>{payloadText(detailOperation.output)}</pre>
-                                <Button
-                                  size="small"
-                                  icon={<CopyOutlined />}
-                                  onClick={() => void copyPayload(detailOperation.output)}
-                                >
-                                  {bpText("detail.copyPayload")}
-                                </Button>
-                              </details>
-                            ) : null}
-                            {payloadText(detailOperation.error) ? (
-                              <details>
-                                <summary>{bpText("detail.recordedError")}</summary>
-                                <pre>{payloadText(detailOperation.error)}</pre>
-                              </details>
-                            ) : null}
-                          </>
-                        ) : (
-                          <Empty
-                            description={bpText("timeline.selectCall")}
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          />
-                        )}
-                      </aside>
-                    </div>
-                  )}
-                </section>
+                    )}
+                  </section>
+                )
               ) : (
                 <CurrentExplanationPanel
                   key={selectedInteraction.interactionId}

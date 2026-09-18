@@ -409,7 +409,7 @@
   font-size: 11px;
 }
 .graphPanel {
-  overflow: hidden;
+  overflow: visible;
 }
 .graphHeader {
   padding: 16px;
@@ -646,6 +646,8 @@
     border-bottom: 1px solid #e4e9ef;
   }
   .inspector {
+    position: static;
+    max-height: none;
     min-height: 170px;
   }
 }
@@ -945,7 +947,7 @@
   color: var(--color-error-text);
 }
 .timeWorkspace {
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #dfe5ed;
   border-radius: 8px;
   background: #fff;
@@ -1044,6 +1046,21 @@
 .timeCopy em {
   display: block;
 }
+.timeStatus {
+  display: inline-flex !important;
+  float: right;
+  border-radius: 999px;
+  background: #e7f6ef;
+  padding: 2px 7px;
+  color: var(--color-success-text);
+  font-size: 10px !important;
+  font-style: normal;
+  font-weight: 600;
+}
+.timeStatus.failed {
+  background: #fff0f0;
+  color: var(--color-error-text);
+}
 .timeCopy b {
   font-size: 13px;
 }
@@ -1072,7 +1089,83 @@
   background: #f3f7ff;
   box-shadow: 0 0 0 2px rgba(49, 93, 156, 0.08);
 }
+.timeCopy code {
+  border-radius: 3px;
+  background: #eef2f7;
+  padding: 1px 4px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+.timeGroup {
+  position: relative;
+}
+.timeGroupToggle {
+  display: block;
+  margin: -4px 0 9px 116px;
+  border: 0;
+  background: transparent;
+  padding: 3px 7px;
+  color: var(--color-text-link);
+  font-size: 11px;
+  cursor: pointer;
+}
+.timeChildren {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 10px 116px;
+  border-left: 2px solid #dce4ef;
+  padding-left: 10px;
+}
+.timeChildren button {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(130px, 1fr) auto minmax(120px, 1fr);
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #e0e6ef;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 8px 10px;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.timeChildren button:hover,
+.timeChildren button.timeChildSelected {
+  border-color: #89a9e1;
+  background: #f0f5ff;
+}
+.timeChildren small {
+  grid-column: 1/-1;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timeChildren span {
+  font-size: 11px;
+  font-weight: 650;
+}
+.timeChildren code {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+.timeChildren em {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .timeInspector {
+  position: sticky;
+  top: 58px;
+  max-height: calc(100vh - 76px);
+  align-self: start;
+  overflow: auto;
   border-left: 1px solid #e4e9ef;
   background: #f8fafc;
   padding: 18px;
@@ -1136,6 +1229,44 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+.inspectorInterface {
+  display: block;
+  margin: -2px 0 10px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.timeCopy .timeFact {
+  margin-top: 5px;
+  color: var(--color-text-primary);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: normal;
+}
+.inspectorFacts {
+  margin: 0 0 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 6px;
+  background: #fff;
+  padding: 8px 10px;
+}
+.inspectorFacts p {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 11px;
+}
+.inspectorFacts p + p {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #edf0f4;
+}
+.inspectorFacts b {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
 @media (max-width: 1100px) {
   .summaryGrid {
     grid-template-columns: repeat(2, 1fr);
@@ -1144,6 +1275,8 @@
     grid-template-columns: 1fr;
   }
   .timeInspector {
+    position: static;
+    max-height: none;
     border-top: 1px solid #e4e9ef;
     border-left: 0;
   }
@@ -1191,6 +1324,16 @@
   .timeItem > i {
     left: 76px;
   }
+  .timeGroupToggle,
+  .timeChildren {
+    margin-left: 93px;
+  }
+  .timeChildren button {
+    grid-template-columns: 1fr;
+  }
+  .timeChildren em {
+    white-space: normal;
+  }
 }
 .graphToolbar {
   flex-wrap: wrap;
@@ -1237,8 +1380,17 @@
   color: var(--color-text-primary);
 }
 .inspector {
-  max-height: 620px;
+  position: sticky;
+  top: 58px;
+  max-height: calc(100vh - 76px);
+  align-self: start;
   overflow: auto;
+}
+@media (max-width: 1100px) {
+  .inspector {
+    position: static;
+    max-height: none;
+  }
 }
 @media (max-width: 760px) {
   .graphClaimPicker {

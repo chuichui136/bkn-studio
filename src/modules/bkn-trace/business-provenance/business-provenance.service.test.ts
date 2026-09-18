@@ -48,6 +48,14 @@ describe("EE business provenance service", () => {
     getMock
       .mockResolvedValueOnce({
         data: {
+          time_rail: [
+            {
+              id: "time:child:1",
+              operation_id: "child",
+              parent_operation_id: "function",
+              order: 1,
+            },
+          ],
           interaction_id: "int-1",
           interaction_question: "完整问题",
           interaction_result: "## 完整回答",
@@ -114,6 +122,10 @@ describe("EE business provenance service", () => {
       "/agent-observability/v1/business-provenance/interactions/int-1/markdown",
       { responseType: "text" },
     );
+    expect(projection.timeRail?.[0]).toMatchObject({
+      operation_id: "child",
+      parent_operation_id: "function",
+    });
     expect(projection.operations[0]?.operationId).toBe("op-1");
     expect(projection).toMatchObject({
       interactionQuestion: "完整问题",

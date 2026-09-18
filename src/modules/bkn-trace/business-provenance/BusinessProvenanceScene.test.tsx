@@ -13,13 +13,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BusinessProvenanceScene } from "@/modules/bkn-trace/business-provenance/BusinessProvenanceScene";
 
-const normalizeCss = (source: string) =>
-  source
-    .replace(/\s+/g, " ")
-    .replace(/\s*([{}:;,>])\s*/g, "$1")
-    .replace(/;}/g, "}")
-    .replace(/(-?)0\.(\d+)/g, "$1.$2");
-
 const getConversations = vi.hoisted(() => vi.fn());
 const getInteractions = vi.hoisted(() => vi.fn());
 const getInteraction = vi.hoisted(() => vi.fn());
@@ -564,22 +557,21 @@ describe("BusinessProvenanceScene", { timeout: 30_000 }, () => {
   });
 
   it("defines compact typography for the analysis workspace", () => {
-    const styles = normalizeCss(
-      readFileSync(
-        resolve(
-          process.cwd(),
-          "src/modules/bkn-trace/business-provenance/BusinessProvenanceScene.module.css",
-        ),
-        "utf8",
+    const styles = readFileSync(
+      resolve(
+        process.cwd(),
+        "src/modules/bkn-trace/business-provenance/BusinessProvenanceScene.module.css",
       ),
+      "utf8",
     );
+    const normalizedStyles = styles.replace(/\s+/g, " ").replace(/\s*([{}:;,])\s*/g, "$1");
 
-    expect(styles).toContain(".conversationHeading h1{font-size:18px}");
-    expect(styles).toContain(".roundSidebarTitle h3,.operationCard h3{font-size:16px}");
-    expect(styles).toContain(
-      ".roundList strong,.interactionSummary h2,.sourceTexts p,.operationCard p{font-size:14px}",
+    expect(normalizedStyles).toContain(".conversationHeading h1{font-size:18px;}");
+    expect(normalizedStyles).toContain(".roundSidebarTitle h3,.operationCard h3{font-size:16px;}");
+    expect(normalizedStyles).toContain(
+      ".roundList strong,.interactionSummary h2,.sourceTexts p,.operationCard p{font-size:14px;}",
     );
-    expect(styles).not.toContain(".conversationHeading h1{width:100%;font-size:25px}");
+    expect(normalizedStyles).not.toContain(".conversationHeading h1{width:100%;font-size:25px;}");
   });
 
   it("keeps an eight-column conversation list before opening one interaction workspace", async () => {
@@ -896,27 +888,94 @@ describe("BusinessProvenanceScene", { timeout: 30_000 }, () => {
     expect(within(inspector).getByText("op-34")).not.toBeNull();
     expect(inspector.scrollTop).toBe(0);
 
-    const styles = normalizeCss(
-      readFileSync(
-        resolve(
-          process.cwd(),
-          "src/modules/bkn-trace/business-provenance/BusinessProvenanceScene.module.css",
-        ),
-        "utf8",
+    const styles = readFileSync(
+      resolve(
+        process.cwd(),
+        "src/modules/bkn-trace/business-provenance/BusinessProvenanceScene.module.css",
       ),
+      "utf8",
     );
+    const normalizedStyles = styles.replace(/\s+/g, " ").replace(/\s*([{}:;,])\s*/g, "$1");
 
-    expect(styles).toContain(
-      ".timelineLayout{display:grid;grid-template-columns:minmax(360px,1.15fr) minmax(300px,.85fr);align-items:stretch;height:clamp(480px,calc(100vh - 220px),720px);min-height:0;overflow:hidden",
+    expect(normalizedStyles).toContain(
+      ".timelineLayout{display:grid;grid-template-columns:minmax(360px,1.15fr) minmax(300px,0.85fr);align-items:stretch;height:clamp(480px,calc(100vh - 220px),720px);min-height:0;overflow:hidden;",
     );
-    expect(styles).toContain(
-      ".timelineList{display:grid;align-content:start;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable",
+    expect(normalizedStyles).toContain(
+      ".timelineList{display:grid;align-content:start;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;",
     );
-    expect(styles).toContain(
-      ".timelineInspector{position:static;min-width:0;min-height:0;margin:14px;overflow-y:auto;overscroll-behavior:contain",
+    expect(normalizedStyles).toContain(
+      ".timelineInspector{position:static;min-width:0;min-height:0;margin:14px;overflow-y:auto;overscroll-behavior:contain;",
     );
-    expect(styles).toContain(
-      ".timelineLayout{height:auto;min-height:0;overflow:visible;grid-template-columns:1fr}",
+    expect(normalizedStyles).toContain(
+      ".timelineLayout{height:auto;min-height:0;overflow:visible;grid-template-columns:1fr;}",
     );
+  });
+
+  it("opens managed function hierarchy on the default timeline without generating evidence", async () => {
+    getConversations.mockResolvedValue({
+      entries: [
+        { conversationId: "conv-managed", questionPreview: "最多能卖多少", interactionCount: 1 },
+      ],
+      total: 1,
+    });
+    getInteractions.mockResolvedValue({
+      entries: [{ interactionId: "int-managed", roundNumber: 1, questionPreview: "最多能卖多少" }],
+      total: 1,
+    });
+    getInteraction.mockResolvedValue({
+      interactionId: "int-managed",
+      conversationContext: [],
+      derivedFacts: [],
+      contextRelations: [],
+      operations: [
+        {
+          operationId: "query",
+          toolName: "query_object_instance",
+          callStatus: "completed",
+          query: { resultCount: 507 },
+          objects: [{ id: "bom", name: "产品BOM" }],
+          elements: [{ kind: "object", id: "bom", name: "产品BOM" }],
+          missingFacts: [],
+        },
+      ],
+      timeRail: [
+        {
+          id: "function",
+          order: 1,
+          operation_id: "function",
+          attempt: 1,
+          interface_name: "function-id",
+          status: "completed",
+          capability: { evidence_contract: "managed_function_execution/v1" },
+          input: {
+            mode: "inline",
+            inline: { function_name: "合计可售", arguments: { product: "382-000005" } },
+          },
+          output: {
+            mode: "inline",
+            inline: { total_sellable_qty: 534, fg_qty: 534, theoretical_build_qty: 0 },
+          },
+        },
+        {
+          id: "query",
+          order: 2,
+          operation_id: "query",
+          parent_operation_id: "function",
+          attempt: 1,
+          interface_name: "query_object_instance",
+          status: "completed",
+          input: { mode: "inline", inline: {} },
+        },
+      ],
+    });
+    render(<BusinessProvenanceScene />);
+    fireEvent.click(await screen.findByRole("button", { name: "最多能卖多少" }));
+    const expand = await screen.findByRole("button", { name: "展开内部执行（1）" });
+    expect(screen.getByRole("tab", { name: "时间链" })).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByText(/实际结果.*合计可售 534.*成品现货 534.*理论可产 0/),
+    ).toBeInTheDocument();
+    fireEvent.click(expand);
+    expect(screen.getByRole("button", { name: /产品BOM.*返回 507/ })).toBeInTheDocument();
   });
 });

@@ -109,6 +109,42 @@ function payloadContent(value?: TimeRailPayload) {
   return value.omitted_reason || p16Text("function.notRecorded");
 }
 
+function RecordedAttempt({ item }: { item: TimeRailItem }) {
+  const [open, setOpen] = useState(false);
+  const name = managedFunctionInfo(item)?.name || timelineBusinessName(item.interface_name);
+  return (
+    <details className={styles.attempt} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>
+        <code>
+          {name} ({item.interface_name})
+        </code>{" "}
+        · #{item.attempt} · {statusLabel(item.status)}
+      </summary>
+      {open && (
+        <>
+          <small>{item.operation_id}</small>
+          <div>
+            <b>{p16Text("function.inputPayload")}</b>
+            <pre>{payloadContent(item.input)}</pre>
+          </div>
+          {item.output && (
+            <div>
+              <b>{p16Text("function.outputPayload")}</b>
+              <pre>{payloadContent(item.output)}</pre>
+            </div>
+          )}
+          {item.error && (
+            <div>
+              <b>{p16Text("function.errorPayload")}</b>
+              <pre>{payloadContent(item.error)}</pre>
+            </div>
+          )}
+        </>
+      )}
+    </details>
+  );
+}
+
 function BusinessFunctionCard({
   value,
   timeRail,
@@ -118,6 +154,10 @@ function BusinessFunctionCard({
 }) {
   const [technical, setTechnical] = useState(false);
   const attempts = timeRail.filter((item) => value.operationIds.includes(item.operation_id));
+  const managedRoot = attempts.find(
+    (item) => item.capability?.evidence_contract === managedFunctionContract,
+  );
+  const recordedResult = managedRoot ? managedFunctionFacts(managedRoot).outputSummary : undefined;
   return (
     <article className={styles.functionCard}>
       <header>
@@ -127,6 +167,11 @@ function BusinessFunctionCard({
         </div>
         <Tag color={value.validationStatus === "invalid" ? "error" : "blue"}>
           {capabilityLabel(value.capabilityKind)}
+          {value.technicalExecution.completeness === "failed"
+            ? ` · ${statusLabel("failed")}`
+            : value.technicalExecution.completeness === "partial"
+              ? ` · ${statusLabel("partial")}`
+              : ""}
         </Tag>
       </header>
       <p className={styles.purpose}>{value.businessPurpose}</p>
@@ -136,8 +181,12 @@ function BusinessFunctionCard({
           {value.businessInputs.length ? (
             value.businessInputs.map((input, index) => (
               <div key={`${input.name}:${index}`}>
-                <b>{input.name}</b>
-                <p>{input.value || input.sourceRef || p16Text("function.valueMissing")}</p>
+                <b>{businessFieldLabel(input.name)}</b>
+                <p>
+                  {input.value
+                    ? businessCardSummary(input.value)
+                    : input.sourceRef || p16Text("function.valueMissing")}
+                </p>
                 <small>
                   {input.sourceKind ? p16Text("function.source", { source: input.sourceKind }) : ""}
                 </small>
@@ -156,9 +205,13 @@ function BusinessFunctionCard({
         <i aria-hidden="true">→</i>
         <section>
           <span>{p16Text("function.output")}</span>
-          {value.businessOutputs.length ? (
+          {recordedResult ? (
+            <p>{recordedResult}</p>
+          ) : value.businessOutputs.length ? (
             value.businessOutputs.map((output, index) => (
-              <p key={`${output.summary}:${index}`}>{output.summary}</p>
+              <p key={`${output.summary}:${index}`}>
+                {businessCardSummary(output.summary, businessResultPriority)}
+              </p>
             ))
           ) : (
             <p>{p16Text("function.outputMissing")}</p>
@@ -219,41 +272,7 @@ function BusinessFunctionCard({
             </div>
           </dl>
           {attempts.map((item) => (
-            <article className={styles.attempt} key={item.id}>
-              <header>
-                <code>{item.interface_name}</code>
-                <span>
-                  {item.operation_id} · #{item.attempt}
-                </span>
-                <Tag
-                  color={
-                    item.status === "completed"
-                      ? "success"
-                      : item.status === "failed"
-                        ? "error"
-                        : "default"
-                  }
-                >
-                  {item.status}
-                </Tag>
-              </header>
-              <div>
-                <b>{p16Text("function.inputPayload")}</b>
-                <pre>{payloadContent(item.input)}</pre>
-              </div>
-              {item.output && (
-                <div>
-                  <b>{p16Text("function.outputPayload")}</b>
-                  <pre>{payloadContent(item.output)}</pre>
-                </div>
-              )}
-              {item.error && (
-                <div>
-                  <b>{p16Text("function.errorPayload")}</b>
-                  <pre>{payloadContent(item.error)}</pre>
-                </div>
-              )}
-            </article>
+            <RecordedAttempt key={item.id} item={item} />
           ))}
         </section>
       )}
@@ -278,9 +297,10 @@ function ReadingView({
   const summary = answerSummary(pair.answer || p16Text("pairs.answerMissing"));
   const selectedClaim =
     graph.claims.find((claim) => claim.id === selectedClaimId) || graph.claims[0];
-  const visibleFunctions = selectedClaim
+  const linkedFunctions = selectedClaim
     ? graph.businessFunctions.filter((item) => item.supportsClaimIds.includes(selectedClaim.id))
     : graph.businessFunctions;
+  const visibleFunctions = linkedFunctions;
   const evidenceIds = new Set(selectedClaim?.nodeIds || []);
   graph.edges.forEach((edge) => {
     if (selectedClaim && edge.toId === selectedClaim.id) evidenceIds.add(edge.fromId);
@@ -387,11 +407,11 @@ function ReadingView({
         <Empty description={p16Text("reading.noFunction")} />
       )}
       {visibleEvidence.length > 0 && (
-        <section className={styles.evidenceList}>
-          <header>
-            <h3>{p16Text("reading.adoptedEvidence")}</h3>
-            <span>{p16Text("reading.itemCount", { count: visibleEvidence.length })}</span>
-          </header>
+        <details className={styles.evidenceList}>
+          <summary>
+            {p16Text(selectedClaim ? "reading.adoptedEvidence" : "reading.recordedEvidence")} ·{" "}
+            {p16Text("reading.itemCount", { count: visibleEvidence.length })}
+          </summary>
           <div>
             {visibleEvidence.map((node) => (
               <article key={node.id}>
@@ -402,7 +422,7 @@ function ReadingView({
               </article>
             ))}
           </div>
-        </section>
+        </details>
       )}
     </div>
   );
@@ -435,6 +455,8 @@ function graphNodes(
       y: 52 + index * 150,
     }),
   );
+  const technicalStart =
+    52 + graph.businessFunctions.length * 150 + (graph.businessFunctions.length ? 30 : 0);
   if (layers.has("technical"))
     graph.executionSteps.forEach((value, index) =>
       nodes.push({
@@ -444,7 +466,7 @@ function graphNodes(
         copy: value.interfaceName,
         meta: value.operationId,
         x: 28,
-        y: 260 + index * 135,
+        y: technicalStart + index * 135,
       }),
     );
   graph.evidenceNodes.forEach((value, index) =>
@@ -458,6 +480,7 @@ function graphNodes(
       y: 52 + index * 125,
     }),
   );
+  const schemaStart = 52 + graph.evidenceNodes.length * 125 + (graph.evidenceNodes.length ? 30 : 0);
   if (layers.has("ontology"))
     graph.schemaNodes.forEach((value, index) =>
       nodes.push({
@@ -467,7 +490,7 @@ function graphNodes(
         copy: value.detail,
         meta: value.kind,
         x: 300,
-        y: 330 + index * 120,
+        y: schemaStart + index * 120,
       }),
     );
   const selectedClaim =
@@ -479,8 +502,8 @@ function graphNodes(
       title: selectedClaim.label,
       copy: selectedClaim.value,
       meta: statusLabel(selectedClaim.supportStatus),
-      x: 300,
-      y: Math.max(190, 62 + graph.evidenceNodes.length * 125),
+      x: 572,
+      y: 52,
     });
   return nodes;
 }
@@ -731,17 +754,305 @@ function payloadSummary(value?: TimeRailPayload) {
   return p16Text("timeline.inline");
 }
 
-function TimeRailView({ items }: { items: TimeRailItem[] }) {
+const managedFunctionContract = "managed_function_execution/v1";
+
+type ManagedFunctionInfo = { name: string; description: string };
+type TimeRailEntry = { root: TimeRailItem; members: TimeRailItem[]; managed: boolean };
+
+function inlineObject(value?: TimeRailPayload): Record<string, unknown> | undefined {
+  if (value?.mode !== "inline" || value.inline === undefined || value.inline === null)
+    return undefined;
+  if (typeof value.inline === "object" && !Array.isArray(value.inline))
+    return value.inline as Record<string, unknown>;
+  if (typeof value.inline !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(value.inline) as unknown;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function businessFieldLabel(key: string) {
+  const translated = p16Text(`timeline.field.${key}`);
+  return translated.endsWith(`timeline.field.${key}`) ? key : translated;
+}
+
+function businessValue(value: unknown): string {
+  if (typeof value === "boolean")
+    return value ? p16Text("timeline.booleanTrue") : p16Text("timeline.booleanFalse");
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) {
+    const primitives = value
+      .filter((item) => ["string", "number", "boolean"].includes(typeof item))
+      .slice(0, 3)
+      .map(businessValue);
+    if (primitives.length === value.length && primitives.length > 0)
+      return `${value.length} ${p16Text("timeline.items")}${p16Text("timeline.labelSeparator")}${primitives.join(p16Text("timeline.listSeparator"))}`;
+    const demandText = value
+      .map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return "";
+        const record = item as Record<string, unknown>;
+        const product = record.product ?? record.product_code;
+        const qty = record.qty ?? record.demand_qty;
+        return product !== undefined && qty !== undefined
+          ? `${businessValue(product)} × ${businessValue(qty)}`
+          : "";
+      })
+      .filter(Boolean);
+    if (demandText.length === value.length && demandText.length > 0)
+      return demandText.join(p16Text("timeline.statementSeparator"));
+    return primitives.length
+      ? `${value.length} ${p16Text("timeline.items")}${p16Text("timeline.labelSeparator")}${primitives.join(p16Text("timeline.listSeparator"))}${value.length > primitives.length ? "…" : ""}`
+      : `${value.length} ${p16Text("timeline.items")}`;
+  }
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return p16Text("function.valueMissing");
+}
+
+function unwrapBusinessResult(value: unknown): unknown {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        return unwrapBusinessResult(JSON.parse(trimmed) as unknown);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  if (record.body !== undefined) return unwrapBusinessResult(record.body);
+  if (record.result !== undefined && record.result !== null)
+    return unwrapBusinessResult(record.result);
+  if (record.stdout !== undefined && record.stdout !== "")
+    return unwrapBusinessResult(record.stdout);
+  return record;
+}
+
+const businessResultPriority = [
+  "l1_main_count",
+  "affected_product_count",
+  "total_sellable_qty",
+  "fg_qty",
+  "theoretical_build_qty",
+  "kitting_ok",
+  "gap_count",
+  "all_satisfied",
+  "unsatisfied_demand_count",
+  "shared_shortage_count",
+  "node_count_total",
+  "shared_count",
+  "line_count",
+  "lead_time_days",
+  "count",
+];
+
+function businessRecordSummary(value: unknown, priority: string[] = []) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return businessValue(value);
+  const record = value as Record<string, unknown>;
+  const ordered = [...priority, ...Object.keys(record)].filter(
+    (key, index, all) => all.indexOf(key) === index,
+  );
+  const chosen = ordered
+    .filter(
+      (key) =>
+        record[key] !== undefined &&
+        !["status_code", "exit_code", "metrics", "artifacts", "session_id"].includes(key),
+    )
+    .slice(0, 3);
+  return chosen
+    .map((key) => `${businessFieldLabel(key)} ${businessValue(record[key])}`)
+    .join(p16Text("timeline.statementSeparator"));
+}
+
+function businessCardSummary(value: string, priority: string[] = []) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return (
+      businessRecordSummary(unwrapBusinessResult(JSON.parse(trimmed) as unknown), priority) || value
+    );
+  } catch {
+    return value;
+  }
+}
+
+function managedFunctionFacts(item: TimeRailItem) {
+  const input = inlineObject(item.input);
+  const inputSummary = businessRecordSummary(input?.arguments, [
+    "product",
+    "material_code",
+    "qty",
+    "demands",
+    "forecast_id",
+    "substitute_enabled",
+    "depth",
+    "include_substitute",
+  ]);
+  const output =
+    item.output?.mode === "inline" ? unwrapBusinessResult(item.output.inline) : undefined;
+  return { inputSummary, outputSummary: businessRecordSummary(output, businessResultPriority) };
+}
+
+function managedFunctionInfo(item?: TimeRailItem): ManagedFunctionInfo | undefined {
+  if (!item || item.capability?.evidence_contract !== managedFunctionContract) return undefined;
+  const input = inlineObject(item.input);
+  const name = typeof input?.function_name === "string" ? input.function_name.trim() : "";
+  const description =
+    typeof input?.function_description === "string" ? input.function_description.trim() : "";
+  return { name: name || timelineBusinessName(item.interface_name), description };
+}
+
+function timelineBusinessName(interfaceName: string) {
+  switch (interfaceName) {
+    case "search_capabilities":
+      return p16Text("timeline.interface.searchCapabilities");
+    case "execute_tool":
+      return p16Text("timeline.interface.executeTool");
+    case "query_object_instance":
+      return p16Text("timeline.interface.queryObject");
+    case "query_relation_instance":
+      return p16Text("timeline.interface.queryRelation");
+    case "run_sql":
+      return p16Text("timeline.interface.runSql");
+    case "run_cypher":
+      return p16Text("timeline.interface.runCypher");
+    case "run_code":
+      return p16Text("timeline.interface.runCode");
+    default:
+      return interfaceName;
+  }
+}
+
+function buildTimeRailEntries(ordered: TimeRailItem[]): TimeRailEntry[] {
+  const children = new Map<string, TimeRailItem[]>();
+  const attempts = new Map<string, TimeRailItem[]>();
+  ordered.forEach((item) => {
+    attempts.set(item.operation_id, [...(attempts.get(item.operation_id) || []), item]);
+    if (!item.parent_operation_id) return;
+    children.set(item.parent_operation_id, [
+      ...(children.get(item.parent_operation_id) || []),
+      item,
+    ]);
+  });
+  const nextAttemptOrder = (item: TimeRailItem) =>
+    (attempts.get(item.operation_id) || [])
+      .filter((candidate) => candidate.order > item.order)
+      .reduce<number | undefined>(
+        (next, candidate) =>
+          next === undefined || candidate.order < next ? candidate.order : next,
+        undefined,
+      );
+  const nearestPrecedingAttempt = (operationId: string | undefined, item: TimeRailItem) => {
+    if (!operationId) return undefined;
+    const candidates = attempts.get(operationId) || [];
+    if (candidates.length === 1) return candidates[0];
+    return [...candidates].reverse().find((candidate) => candidate.order <= item.order);
+  };
+  const parents = new Map<string, TimeRailItem>();
+  const hidden = new Set<string>();
+  ordered.forEach((item) => {
+    if (item.capability?.evidence_contract !== managedFunctionContract) return;
+    const parent = nearestPrecedingAttempt(item.parent_operation_id, item);
+    if (parent) {
+      parents.set(item.id, parent);
+      hidden.add(parent.id);
+    }
+  });
+  const claimed = new Set<string>();
+  const descendants = (root: TimeRailItem) => {
+    const result: TimeRailItem[] = [];
+    const visit = (item: TimeRailItem) => {
+      if (claimed.has(item.id)) return;
+      claimed.add(item.id);
+      result.push(item);
+      const attemptsForItem = attempts.get(item.operation_id) || [];
+      const nextOrder = nextAttemptOrder(item);
+      (children.get(item.operation_id) || [])
+        .filter(
+          (child) =>
+            attemptsForItem.length <= 1 ||
+            (child.order > item.order && (nextOrder === undefined || child.order < nextOrder)),
+        )
+        .forEach(visit);
+    };
+    visit(root);
+    return result.sort((left, right) => left.order - right.order);
+  };
+  const entries: TimeRailEntry[] = [];
+  const appendEntry = (item: TimeRailItem) => {
+    if (hidden.has(item.id) || claimed.has(item.id)) return;
+    const managed = item.capability?.evidence_contract === managedFunctionContract;
+    const members = managed ? descendants(item) : [item];
+    const parent = managed ? parents.get(item.id) : undefined;
+    if (parent && !members.some((member) => member.id === parent.id)) {
+      claimed.add(parent.id);
+      members.push(parent);
+    }
+    entries.push({ root: item, members, managed });
+    if (!managed) claimed.add(item.id);
+  };
+  ordered
+    .filter((item) => item.capability?.evidence_contract === managedFunctionContract)
+    .forEach(appendEntry);
+  ordered.forEach(appendEntry);
+  return entries.sort((left, right) => left.root.order - right.root.order);
+}
+
+function timelineTechnicalName(entry: TimeRailEntry) {
+  const parent = entry.members.find(
+    (item) => item.id !== entry.root.id && item.operation_id === entry.root.parent_operation_id,
+  );
+  return entry.managed && parent
+    ? `${parent.interface_name} · ${entry.root.interface_name}`
+    : entry.root.interface_name;
+}
+
+function timeRailEntryStatus(entry: TimeRailEntry): string {
+  if (entry.members.some((item) => item.status === "failed")) return "failed";
+  if (entry.members.some((item) => item.status === "interrupted")) return "interrupted";
+  if (entry.root.status !== "completed") return entry.root.status;
+  return entry.members.find((item) => item.status !== "completed")?.status || "completed";
+}
+
+export type TimeRailBusinessSummary = {
+  name?: string;
+  object?: string;
+  condition?: string;
+  result?: string;
+};
+
+export function TimeRailView({
+  items,
+  summaries = {},
+}: {
+  items: TimeRailItem[];
+  summaries?: Record<string, TimeRailBusinessSummary>;
+}) {
   const ordered = useMemo(
     () => [...items].sort((left, right) => left.order - right.order),
     [items],
   );
+  const entries = useMemo(() => buildTimeRailEntries(ordered), [ordered]);
   const [filter, setFilter] = useState<"all" | "completed" | "failed">("all");
-  const filtered = filter === "all" ? ordered : ordered.filter((item) => item.status === filter);
-  const [selectedId, setSelectedId] = useState(ordered[0]?.id);
-  const firstItemId = ordered[0]?.id;
+  const filtered =
+    filter === "all" ? entries : entries.filter((entry) => timeRailEntryStatus(entry) === filter);
+  const [selectedId, setSelectedId] = useState(entries[0]?.root.id);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const firstItemId = entries[0]?.root.id;
   useEffect(() => setSelectedId(firstItemId), [firstItemId]);
-  const selected = ordered.find((item) => item.id === selectedId) || filtered[0] || ordered[0];
+  const visibleIds = new Set(filtered.flatMap((entry) => entry.members.map((item) => item.id)));
+  const selected = visibleIds.has(selectedId || "")
+    ? ordered.find((item) => item.id === selectedId)
+    : filtered[0]?.root;
+  const selectedEntry = selected
+    ? filtered.find((entry) => entry.members.some((item) => item.id === selected.id))
+    : undefined;
   if (!ordered.length) return <Empty description={p16Text("timeline.empty")} />;
   return (
     <section className={styles.timeWorkspace}>
@@ -761,7 +1072,7 @@ function TimeRailView({ items }: { items: TimeRailItem[] }) {
             className={filter === "all" ? styles.filterActive : undefined}
             onClick={() => setFilter("all")}
           >
-            {p16Text("timeline.all", { count: ordered.length })}
+            {p16Text("timeline.all", { count: entries.length })}
           </button>
           <button
             type="button"
@@ -769,7 +1080,7 @@ function TimeRailView({ items }: { items: TimeRailItem[] }) {
             onClick={() => setFilter("completed")}
           >
             {p16Text("timeline.completed", {
-              count: ordered.filter((item) => item.status === "completed").length,
+              count: entries.filter((entry) => timeRailEntryStatus(entry) === "completed").length,
             })}
           </button>
           <button
@@ -778,87 +1089,209 @@ function TimeRailView({ items }: { items: TimeRailItem[] }) {
             onClick={() => setFilter("failed")}
           >
             {p16Text("timeline.failed", {
-              count: ordered.filter((item) => item.status === "failed").length,
+              count: entries.filter((entry) => timeRailEntryStatus(entry) === "failed").length,
             })}
           </button>
         </div>
       </header>
       <div className={styles.timeLayout}>
         <div className={styles.timeList}>
-          {filtered.map((item, index) => (
-            <button
-              type="button"
-              key={item.id}
-              className={`${styles.timeItem} ${item.id === selected?.id ? styles.timeSelected : ""}`}
-              onClick={() => setSelectedId(item.id)}
-            >
-              <time>{timeLabel(item.started_at)}</time>
-              <span className={`${styles.timeDot} ${styles[item.status] || ""}`}>{item.order}</span>
-              <span className={styles.timeCopy}>
-                <b>{item.interface_name}</b>
-                <small>
-                  {item.source_module || item.protocol} · {durationLabel(item.duration_ms)}
-                </small>
-                <em>
-                  {item.status === "failed"
-                    ? payloadSummary(item.error)
-                    : payloadSummary(item.output)}
-                </em>
-              </span>
-              {index < filtered.length - 1 ? <i aria-hidden="true" /> : null}
-            </button>
-          ))}
+          {filtered.map((entry, index) => {
+            const item = entry.root;
+            const functionInfo = managedFunctionInfo(item);
+            const facts = entry.managed ? managedFunctionFacts(item) : undefined;
+            const isExpanded = expanded.has(item.id);
+            const entryStatus = timeRailEntryStatus(entry);
+            const internal = entry.members
+              .filter((member) => member.id !== item.id)
+              .sort((left, right) => left.order - right.order);
+            return (
+              <article className={styles.timeGroup} key={item.id}>
+                <button
+                  type="button"
+                  className={`${styles.timeItem} ${entry.members.some((member) => member.id === selected?.id) ? styles.timeSelected : ""}`}
+                  onClick={() => setSelectedId(item.id)}
+                >
+                  <time>{timeLabel(item.started_at)}</time>
+                  <span className={`${styles.timeDot} ${styles[entryStatus] || ""}`}>
+                    {item.order}
+                  </span>
+                  <span className={styles.timeCopy}>
+                    <span className={`${styles.timeStatus} ${styles[entryStatus]}`}>
+                      {statusLabel(entryStatus)}
+                    </span>
+                    <b>
+                      {functionInfo?.name ||
+                        summaries[item.operation_id]?.name ||
+                        timelineBusinessName(item.interface_name)}
+                    </b>
+                    <small>
+                      <code>{timelineTechnicalName(entry)}</code> ·{" "}
+                      {durationLabel(item.duration_ms)}
+                    </small>
+                    <em>
+                      {functionInfo?.description ||
+                        summaries[item.operation_id]?.result ||
+                        (item.status === "failed"
+                          ? payloadSummary(item.error)
+                          : payloadSummary(item.output))}
+                    </em>
+                    {facts?.inputSummary ? (
+                      <small className={styles.timeFact}>
+                        {p16Text("timeline.businessInput")}
+                        {p16Text("timeline.labelSeparator")}
+                        {facts.inputSummary}
+                      </small>
+                    ) : null}
+                    {facts?.outputSummary ? (
+                      <small className={styles.timeFact}>
+                        {p16Text("timeline.actualResult")}
+                        {p16Text("timeline.labelSeparator")}
+                        {facts.outputSummary}
+                      </small>
+                    ) : null}
+                  </span>
+                  {index < filtered.length - 1 ? <i aria-hidden="true" /> : null}
+                </button>
+                {internal.length > 0 ? (
+                  <button
+                    type="button"
+                    className={styles.timeGroupToggle}
+                    aria-expanded={isExpanded}
+                    onClick={() =>
+                      setExpanded((current) => {
+                        const next = new Set(current);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      })
+                    }
+                  >
+                    {isExpanded
+                      ? p16Text("timeline.collapseInternal")
+                      : p16Text("timeline.expandInternal", { count: internal.length })}
+                  </button>
+                ) : null}
+                {isExpanded ? (
+                  <div className={styles.timeChildren}>
+                    {internal.map((child) => (
+                      <button
+                        type="button"
+                        key={child.id}
+                        className={child.id === selected?.id ? styles.timeChildSelected : undefined}
+                        onClick={() => setSelectedId(child.id)}
+                      >
+                        <span>
+                          {summaries[child.operation_id]?.object ||
+                            summaries[child.operation_id]?.name ||
+                            timelineBusinessName(child.interface_name)}
+                        </span>
+                        <code>{child.interface_name}</code>
+                        <strong className={`${styles.timeStatus} ${styles[child.status] || ""}`}>
+                          {statusLabel(child.status)}
+                        </strong>
+                        {summaries[child.operation_id]?.condition ? (
+                          <small title={summaries[child.operation_id].condition}>
+                            {summaries[child.operation_id].condition}
+                          </small>
+                        ) : null}
+                        <em>
+                          {summaries[child.operation_id]?.result ||
+                            (child.status === "failed"
+                              ? payloadSummary(child.error)
+                              : payloadSummary(child.output))}
+                        </em>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
         <aside className={styles.timeInspector} aria-label={p16Text("timeline.inspector")}>
           <span className={styles.kicker}>{p16Text("timeline.selectedCall")}</span>
-          <h3>{selected?.interface_name}</h3>
-          <p>
-            {selected?.status === "failed"
-              ? p16Text("timeline.failedCall")
-              : payloadSummary(selected?.output)}
-          </p>
-          <dl>
-            <div>
-              <dt>{p16Text("function.operationId")}</dt>
-              <dd>
-                <code>{selected?.operation_id}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>{p16Text("timeline.status")}</dt>
-              <dd>{selected?.status}</dd>
-            </div>
-            <div>
-              <dt>{p16Text("timeline.started")}</dt>
-              <dd>{timeLabel(selected?.started_at)}</dd>
-            </div>
-            <div>
-              <dt>{p16Text("timeline.duration")}</dt>
-              <dd>{durationLabel(selected?.duration_ms)}</dd>
-            </div>
-            <div>
-              <dt>{p16Text("function.realInterface")}</dt>
-              <dd>
-                <code>{selected?.interface_name}</code>
-              </dd>
-            </div>
-          </dl>
-          <details>
-            <summary>{p16Text("function.inputPayload")}</summary>
-            <pre>{payloadContent(selected?.input)}</pre>
-          </details>
-          {selected?.output ? (
-            <details>
-              <summary>{p16Text("function.outputPayload")}</summary>
-              <pre>{payloadContent(selected.output)}</pre>
-            </details>
-          ) : null}
-          {selected?.error ? (
-            <details>
-              <summary>{p16Text("function.errorPayload")}</summary>
-              <pre>{payloadContent(selected.error)}</pre>
-            </details>
-          ) : null}
+          {selected ? (
+            <>
+              <h3>
+                {managedFunctionInfo(selected)?.name ||
+                  summaries[selected.operation_id]?.name ||
+                  timelineBusinessName(selected.interface_name)}
+              </h3>
+              {managedFunctionInfo(selected) && selectedEntry ? (
+                <small className={styles.inspectorInterface}>
+                  {timelineTechnicalName(selectedEntry)}
+                </small>
+              ) : null}
+              <p>
+                {selected.status === "failed"
+                  ? p16Text("timeline.failedCall")
+                  : managedFunctionInfo(selected)?.description ||
+                    summaries[selected.operation_id]?.result ||
+                    payloadSummary(selected.output)}
+              </p>
+              {managedFunctionInfo(selected) ? (
+                <div className={styles.inspectorFacts}>
+                  {managedFunctionFacts(selected).inputSummary ? (
+                    <p>
+                      <b>{p16Text("timeline.businessInput")}</b>
+                      {managedFunctionFacts(selected).inputSummary}
+                    </p>
+                  ) : null}
+                  {managedFunctionFacts(selected).outputSummary ? (
+                    <p>
+                      <b>{p16Text("timeline.actualResult")}</b>
+                      {managedFunctionFacts(selected).outputSummary}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              <dl>
+                <div>
+                  <dt>{p16Text("function.operationId")}</dt>
+                  <dd>
+                    <code>{selected.operation_id}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>{p16Text("timeline.status")}</dt>
+                  <dd>{statusLabel(selected.status)}</dd>
+                </div>
+                <div>
+                  <dt>{p16Text("timeline.started")}</dt>
+                  <dd>{timeLabel(selected.started_at)}</dd>
+                </div>
+                <div>
+                  <dt>{p16Text("timeline.duration")}</dt>
+                  <dd>{durationLabel(selected.duration_ms)}</dd>
+                </div>
+                <div>
+                  <dt>{p16Text("function.realInterface")}</dt>
+                  <dd>
+                    <code>{selected.interface_name}</code>
+                  </dd>
+                </div>
+              </dl>
+              <details>
+                <summary>{p16Text("function.inputPayload")}</summary>
+                <pre>{payloadContent(selected.input)}</pre>
+              </details>
+              {selected.output ? (
+                <details>
+                  <summary>{p16Text("function.outputPayload")}</summary>
+                  <pre>{payloadContent(selected.output)}</pre>
+                </details>
+              ) : null}
+              {selected.error ? (
+                <details>
+                  <summary>{p16Text("function.errorPayload")}</summary>
+                  <pre>{payloadContent(selected.error)}</pre>
+                </details>
+              ) : null}
+            </>
+          ) : (
+            <p>{p16Text("timeline.empty")}</p>
+          )}
         </aside>
       </div>
     </section>
@@ -897,7 +1330,25 @@ export function BusinessProvenance016({
     };
   }, [fullScreen]);
   const selectedPair = pairs.find((pair) => pair.id === selectedId) || pairs[0];
-  const graph = pairGraph(view, selectedPair);
+  const sourceGraph = pairGraph(view, selectedPair);
+  const graph = sourceGraph
+    ? {
+        ...sourceGraph,
+        evidenceNodes: sourceGraph.evidenceNodes.map((node) => {
+          const root = (view.timeRail || []).find(
+            (item) =>
+              item.capability?.evidence_contract === managedFunctionContract &&
+              node.executionNodeId === `operation:${item.operation_id}:${item.attempt}`,
+          );
+          if (!root) return node;
+          return {
+            ...node,
+            label: managedFunctionInfo(root)?.name || node.label,
+            value: managedFunctionFacts(root).outputSummary || node.value,
+          };
+        }),
+      }
+    : undefined;
   const firstClaimId = graph?.claims[0]?.id;
   useEffect(() => setSelectedClaimId(firstClaimId), [selectedPair?.id, firstClaimId]);
   const selectPanel = (next: WorkspacePanel) => {
