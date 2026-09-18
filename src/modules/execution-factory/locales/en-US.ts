@@ -219,6 +219,7 @@ export const executionFactoryEnUS = {
       "Same list view as Capability Management; data comes from the market catalog. Filter by category; items already on this platform are marked so you can introduce or sync.",
     empty: "No execution units",
     emptyDescription: "There are no functions to display yet.",
+    createOnlyDescription: "You can create a new execution capability.",
     catalogEmpty: "No market execution units",
     catalogEmptyDescription: "No functions are available in the market view.",
     emptyByTab: {
