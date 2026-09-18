@@ -42,8 +42,8 @@ describe("DataConnectListPage permissions", () => {
     expect(screen.queryByTestId("data-connect-list")).toBeNull();
   });
 
-  it("mounts the list for type or object-level view access", () => {
-    runtimeConfig.currentUser.permissions = ["catalog:view_detail"];
+  it.each(["catalog:view_detail", "resource:view_detail"])("mounts the list for %s access", (permission) => {
+    runtimeConfig.currentUser.permissions = [permission];
     render(<DataConnectListPage />);
 
     expect(screen.getByTestId("data-connect-list")).toBeTruthy();

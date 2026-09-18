@@ -17,5 +17,16 @@ export const dataCatalogResourceManagePermission = "catalog:resource_manage" as 
 /** Permissions that allow the caller to open a catalog detail. */
 export const catalogDetailPermissions = ["catalog:view_detail", "resource:view_detail"];
 
-/** Grants that let a user enter the catalog workspace. Listing remains backend-filtered by object grants. */
-export const dataCatalogAccessPermissions = [...catalogDetailPermissions, "catalog:create"];
+/**
+ * Grants that let a user enter the catalog workspace. Do not require view_detail here: callers
+ * with a catalog management grant can receive summary-only catalogs, and task management is
+ * explicitly independent of catalog reads. The backend still filters every returned object.
+ */
+export const dataCatalogAccessPermissions = [
+  ...catalogDetailPermissions,
+  "catalog:create",
+  "catalog:modify",
+  "catalog:delete",
+  "catalog:task_manage",
+  "catalog:resource_manage",
+];
