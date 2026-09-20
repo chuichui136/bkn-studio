@@ -21,6 +21,7 @@ import {
 import type {
   ActionTypeActionSource,
   ActionTypeDetail,
+  ActionTypeExecutionParameter,
 } from "@/modules/knowledge-network/types/knowledge-network";
 import type { ActionTypeToolInputParam } from "@/modules/knowledge-network/utils/tool-input-params";
 import { getAllExpandableParamKeys } from "@/modules/knowledge-network/utils/tool-input-params";
@@ -54,6 +55,46 @@ function countLeafRows(rows: ActionTypeParamTableRow[]): number {
     (count, row) => count + (row.children?.length ? countLeafRows(row.children) : 1),
     0,
   );
+}
+
+function getSchemaParameters(schema: ActionTypeToolInputParam[]): ActionTypeToolInputParam[] {
+  return schema.flatMap((parameter) => [
+    parameter,
+    ...getSchemaParameters(parameter.children ?? []),
+  ]);
+}
+
+function buildSavedParameterRows(
+  parameters: ActionTypeExecutionParameter[],
+): ActionTypeParamTableRow[] {
+  return parameters
+    .filter((item) => item.name.trim())
+    .map((item, index) => ({
+      description: item.description,
+      key: `${item.name}-${index}`,
+      name: item.name,
+      source: item.source,
+      type: item.type ?? "",
+      value: item.value ?? item.sourcePropertyName ?? "",
+      valueFrom: item.valueFrom ?? "input",
+    }));
+}
+
+function normalizeSavedParametersForSchema(
+  schema: ActionTypeToolInputParam[],
+  parameters: ActionTypeExecutionParameter[],
+): ActionTypeExecutionParameter[] {
+  const schemaParameters = getSchemaParameters(schema);
+  const schemaKeys = new Set(schemaParameters.map((item) => item.key));
+
+  return parameters.map((parameter) => {
+    if (schemaKeys.has(parameter.name)) {
+      return parameter;
+    }
+
+    const nameMatches = schemaParameters.filter((item) => item.name === parameter.name);
+    return nameMatches.length === 1 ? { ...parameter, name: nameMatches[0].key } : parameter;
+  });
 }
 
 export function ActionTypeExecutionConfigTable({
@@ -184,20 +225,21 @@ export function ActionTypeExecutionConfigTable({
     const savedParameters = detail.executionConfig.parameters;
 
     if (parameterSchema.length > 0) {
-      return buildParamTableRows(parameterSchema, savedParameters);
+      const normalizedSavedParameters = normalizeSavedParametersForSchema(
+        parameterSchema,
+        savedParameters,
+      );
+      const schemaKeys = new Set(getSchemaParameters(parameterSchema).map((item) => item.key));
+
+      return [
+        ...buildParamTableRows(parameterSchema, normalizedSavedParameters),
+        ...buildSavedParameterRows(
+          normalizedSavedParameters.filter((item) => !schemaKeys.has(item.name)),
+        ),
+      ];
     }
 
-    return savedParameters
-      .filter((item) => item.name.trim())
-      .map((item, index) => ({
-        description: item.description,
-        key: `${item.name}-${index}`,
-        name: item.name,
-        source: item.source,
-        type: item.type ?? "",
-        value: item.value ?? item.sourcePropertyName ?? "",
-        valueFrom: item.valueFrom ?? "input",
-      }));
+    return buildSavedParameterRows(savedParameters);
   }, [detail.executionConfig.parameters, parameterSchema]);
 
   const columns: TableProps<ActionTypeParamTableRow>["columns"] = [
